@@ -19,8 +19,8 @@ router = APIRouter(prefix="/api/v1", tags=["Public API"])
 async def get_api_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
     """Auth bằng API Key"""
     api_key = request.headers.get("X-API-Key", "")
-    if not api_key or not api_key.startswith("uf_"):
-        raise HTTPException(status_code=401, detail="Missing or invalid API key. Use header: X-API-Key: uf_xxx")
+    if not api_key or not (api_key.startswith("veo3_") or api_key.startswith("uf_")):
+        raise HTTPException(status_code=401, detail="Missing or invalid API key. Use header: X-API-Key: veo3_xxx")
 
     result = await db.execute(select(User).where(User.api_key == api_key))
     user = result.scalar_one_or_none()

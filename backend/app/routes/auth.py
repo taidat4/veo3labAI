@@ -53,13 +53,15 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Tên đăng nhập đã tồn tại")
 
-    # Tạo user
+    # Tạo user với API key tự động
+    import secrets
     user = User(
         username=req.username,
         password_hash=hash_password(req.password),
         email=req.email,
         balance=0,
         role="customer",
+        api_key=f"veo3_{secrets.token_hex(24)}",
     )
     db.add(user)
     await db.flush()
