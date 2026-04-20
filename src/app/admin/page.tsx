@@ -1363,8 +1363,8 @@ function PlansTab() {
                   <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Credits</p>
                 </div>
                 <div className="rounded-lg p-2.5 text-center" style={{ background: "var(--bg-tertiary)" }}>
-                  <p className="text-lg font-bold" style={{ color: "var(--neon-purple)" }}>{p.price.toLocaleString()} credits</p>
-                  <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Credits</p>
+                  <p className="text-lg font-bold" style={{ color: "var(--neon-purple)" }}>{p.price.toLocaleString()}đ</p>
+                  <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Giá nạp</p>
                 </div>
               </div>
 
