@@ -153,6 +153,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://veo3labai.com",
+        "https://www.veo3labai.com",
         "https://veo3lab.com",
         "https://www.veo3lab.com",
     ],
