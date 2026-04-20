@@ -2,13 +2,26 @@
  * API Docs Page — Trang riêng cho tài liệu API
  */
 "use client";
+import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 
 export default function DocsPage() {
+  const router = useRouter();
+
   return (
     <div className="min-h-screen" style={{ background: "var(--bg-primary)" }}>
       <Navbar />
       <main className="pt-20 px-4 sm:px-6 max-w-4xl mx-auto pb-12">
+
+        {/* Back button */}
+        <button onClick={() => router.back()}
+          className="flex items-center gap-1.5 text-sm font-medium mb-6 transition-colors"
+          style={{ color: "var(--text-muted)" }}
+          onMouseEnter={e => e.currentTarget.style.color = "var(--neon-blue)"}
+          onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}>
+          <span className="material-symbols-rounded text-lg">arrow_back</span>
+          Quay lại
+        </button>
 
         {/* Header */}
         <div className="flex items-center gap-3 mb-8">

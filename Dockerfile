@@ -7,6 +7,9 @@ RUN apt-get update && apt-get install -y python3 python3-pip python3-venv && \
 
 WORKDIR /app
 
+# Create persistent data directory
+RUN mkdir -p /data
+
 # Install Node dependencies
 COPY package*.json ./
 RUN npm ci
@@ -25,4 +28,6 @@ RUN npm run build
 EXPOSE 8080
 
 # Start both: Python backend on 8000, Next.js on 8080
+# DATABASE_URL points to /data/ so it persists across deploys (Railway Volume)
+ENV DATABASE_URL=sqlite+aiosqlite:////data/veo3.db
 CMD bash -c "(cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000) & sleep 3 && npm start"
