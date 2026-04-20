@@ -33,7 +33,10 @@ async def lifespan(app: FastAPI):
     logger.info("[START] Veo3Lab Backend starting...")
 
     # ── Startup ──
+    # Import deposit models so their tables get registered with Base
+    from app.routes.deposit import PendingDeposit, BankTransaction, ensure_deposit_tables  # noqa
     await init_db()
+    await ensure_deposit_tables()
     logger.info("[OK] Database initialized")
 
     # Auto-migrate: add new columns to existing DB
@@ -109,28 +112,6 @@ async def _auto_migrate():
         except Exception:
             pass
 
-
-async def _ensure_admin_user():
-    """Tạo admin user mặc định nếu chưa có"""
-    from sqlalchemy import select
-    from app.database import async_session_factory
-    from app.models import User
-    from app.auth import hash_password
-
-    async with async_session_factory() as session:
-        result = await session.execute(
-            select(User).where(User.username == settings.ADMIN_USERNAME)
-        )
-        if not result.scalar_one_or_none():
-            admin = User(
-                username=settings.ADMIN_USERNAME,
-                password_hash=hash_password(settings.ADMIN_PASSWORD),
-                role="admin",
-                balance=999_999_999,
-            )
-            session.add(admin)
-            await session.commit()
-            logger.info(f"[OK] Admin user created: {settings.ADMIN_USERNAME}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
