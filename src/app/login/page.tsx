@@ -24,24 +24,30 @@ export default function LoginPage() {
     localStorage.removeItem("veo3_user");
   }, []);
 
+  const [success, setSuccess] = useState("");
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setSuccess("");
     setLoading(true);
 
     try {
-      const data = isLogin
-        ? await api.login(username, password)
-        : await api.register(username, password);
-
-      setUser({
-        user_id: data.user_id || 0,
-        username: data.username,
-        role: data.role,
-        balance: data.balance,
-        token: data.access_token,
-      });
-      router.push("/");
+      if (isLogin) {
+        const data = await api.login(username, password);
+        setUser({
+          user_id: data.user_id || 0,
+          username: data.username,
+          role: data.role,
+          balance: data.balance,
+          token: data.access_token,
+        });
+        router.push("/");
+      } else {
+        await api.register(username, password);
+        setSuccess("🎉 Đăng ký thành công! Vui lòng đăng nhập.");
+        setIsLogin(true);
+      }
     } catch (e: any) {
       setError(e.message || "Đã xảy ra lỗi");
     } finally {
@@ -116,6 +122,14 @@ export default function LoginPage() {
                 className="input-field" placeholder="••••••••" required minLength={4}
               />
             </div>
+
+            {success && (
+              <div className="text-sm px-4 py-3 rounded-xl flex items-center gap-2"
+                style={{ background: "rgba(34,197,94,0.08)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)" }}>
+                <span className="material-symbols-rounded text-lg">check_circle</span>
+                {success}
+              </div>
+            )}
 
             {error && (
               <div className="text-sm px-4 py-3 rounded-xl flex items-center gap-2"

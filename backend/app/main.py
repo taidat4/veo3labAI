@@ -112,6 +112,27 @@ async def _auto_migrate():
         except Exception:
             pass
 
+        # Seed 4 default plans if empty
+        try:
+            count = (await conn.execute(__import__("sqlalchemy").text(
+                "SELECT COUNT(*) FROM subscription_plans"
+            ))).scalar()
+            if count == 0:
+                plans = [
+                    ("Free", "Dùng thử miễn phí", 5, 0, 0, 2, '["5 credits miễn phí","2 video đồng thời","720p"]', 1),
+                    ("Basic", "Gói cơ bản cho cá nhân", 50, 99000, 30, 4, '["50 credits/tháng","4 video đồng thời","1080p","Hỗ trợ email"]', 2),
+                    ("Pro", "Gói chuyên nghiệp", 200, 299000, 30, 8, '["200 credits/tháng","8 video đồng thời","1080p + 4K upscale","Hỗ trợ ưu tiên","API access"]', 3),
+                    ("Enterprise", "Gói doanh nghiệp", 1000, 999000, 30, 20, '["1000 credits/tháng","20 video đồng thời","4K upscale","Hỗ trợ 24/7","API không giới hạn","Tài khoản team"]', 4),
+                ]
+                for name, desc, credits, price, days, conc, features, sort in plans:
+                    await conn.execute(__import__("sqlalchemy").text(
+                        "INSERT INTO subscription_plans (name, description, credits, price, duration_days, max_concurrent, features, is_active, sort_order) "
+                        "VALUES (:n, :d, :c, :p, :dd, :mc, :f, 1, :s)"
+                    ), {"n": name, "d": desc, "c": credits, "p": price, "dd": days, "mc": conc, "f": features, "s": sort})
+                logger.info("[SEED] 4 default subscription plans created")
+        except Exception as e:
+            logger.warning(f"[SEED] Plans seed skipped: {e}")
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
