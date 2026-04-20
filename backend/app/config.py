@@ -63,12 +63,17 @@ class Settings(BaseSettings):
     R2_BUCKET: str = "veo3-videos"
     R2_PUBLIC_URL: str = ""
 
-    # ── MBBank Payment ──
+    # ── MBBank Payment (apicanhan.com — full config cho captcha) ──
     MBBANK_API_URL: str = "https://apicanhan.com/api/mbbankv3"
     MBBANK_API_KEY: str = ""
     MBBANK_USERNAME: str = ""
     MBBANK_PASSWORD: str = ""
     MBBANK_ACCOUNT: str = ""
+    MBBANK_SESSION_ID: str = ""
+    MBBANK_ID_RUN: str = ""
+    MBBANK_TOKEN: str = ""
+    MBBANK_COOKIE: str = ""
+    MBBANK_DEVICE_ID: str = ""
     MBBANK_NAME: str = "MB Bank"
 
     # ── Google Flow API ──

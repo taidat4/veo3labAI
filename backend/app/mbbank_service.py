@@ -1,7 +1,7 @@
 """
-MBBank Service - API Cá Nhân Integration
-Kiểm tra giao dịch nạp tiền qua API apicanhan.com
-Adapted for Veo3Lab async architecture
+MBBank Service - API Cá Nhân Integration (FULL config)
+Gửi đầy đủ sessionId, token, cookie, deviceid cho apicanhan.com
+để giải captcha và lấy giao dịch MBBank
 """
 import httpx
 import logging
@@ -14,22 +14,30 @@ settings = get_settings()
 
 
 class MBBankService:
-    """Service để gọi API Cá Nhân MBBank (async)"""
+    """Service để gọi API Cá Nhân MBBank (async) — FULL params"""
 
     def __init__(self):
         self.api_url = settings.MBBANK_API_URL
 
     async def get_transactions(self, limit: int = 20) -> Optional[List[Dict]]:
-        """Lấy danh sách giao dịch gần đây từ MBBank"""
+        """Lấy danh sách giao dịch gần đây từ MBBank — gửi full config"""
         try:
             params = {
                 "key": settings.MBBANK_API_KEY,
                 "username": settings.MBBANK_USERNAME,
                 "password": settings.MBBANK_PASSWORD,
                 "accountNo": settings.MBBANK_ACCOUNT,
+                "sessionId": settings.MBBANK_SESSION_ID,
+                "id_run": settings.MBBANK_ID_RUN,
+                "token": settings.MBBANK_TOKEN,
+                "cookie": settings.MBBANK_COOKIE,
+                "deviceid": settings.MBBANK_DEVICE_ID,
             }
 
-            async with httpx.AsyncClient(timeout=15) as client:
+            # Remove empty params
+            params = {k: v for k, v in params.items() if v}
+
+            async with httpx.AsyncClient(timeout=30) as client:
                 response = await client.get(self.api_url, params=params)
 
             if response.status_code == 200:
@@ -88,6 +96,20 @@ class MBBankService:
                 return tx
 
         return None
+
+    async def test_connection(self) -> bool:
+        """Kiểm tra kết nối API MBBank"""
+        try:
+            transactions = await self.get_transactions(limit=1)
+            if transactions is not None:
+                logger.info("✅ Kết nối API MBBank thành công!")
+                return True
+            else:
+                logger.warning("⚠️ Không thể kết nối API MBBank")
+                return False
+        except Exception as e:
+            logger.error(f"❌ Lỗi kết nối API MBBank: {e}")
+            return False
 
 
 # Singleton
