@@ -1,0 +1,226 @@
+/**
+ * Zustand Store — Global state management
+ * Supports batch generation, queue tracking, and media type switching
+ */
+
+import { create } from "zustand";
+
+// ── Types ──
+export interface UserData {
+  user_id: number;
+  username: string;
+  role: string;
+  balance: number;
+  token: string;
+}
+
+export interface ActiveJob {
+  id: number;
+  prompt: string;
+  status: string;
+  progress: number;
+  videoUrl?: string;
+  mediaType?: string; // "video" | "image"
+  error?: string;
+  startedAt: number;
+}
+
+export interface HistoryJob {
+  id: number;
+  prompt: string;
+  status: string;
+  progress_percent: number;
+  model_key?: string;
+  media_type?: string;
+  video_url?: string;
+  r2_url?: string;
+  media_id?: string;
+  thumbnail_url?: string;
+  cost: number;
+  error?: string;
+  upscale_status?: string;  // "processing" | "completed" | null
+  upscale_url?: string;     // URL after upscale done
+  created_at: string;
+  started_at?: string;
+  finished_at?: string;
+}
+
+export interface BatchRow {
+  id: string; // temp client ID
+  prompt: string;
+  jobId?: number;
+  status: "idle" | "waiting" | "queued" | "pending" | "processing" | "completed" | "failed";
+  progress: number;
+  videoUrl?: string;
+  error?: string;
+  mediaType?: string;
+}
+
+// ── Store ──
+interface AppStore {
+  // Auth
+  user: UserData | null;
+  setUser: (user: UserData | null) => void;
+  logout: () => void;
+
+  // Active jobs (đang xử lý)
+  activeJobs: Map<number, ActiveJob>;
+  addActiveJob: (job: ActiveJob) => void;
+  updateActiveJob: (id: number, updates: Partial<ActiveJob>) => void;
+  removeActiveJob: (id: number) => void;
+
+  // History
+  history: HistoryJob[];
+  setHistory: (jobs: HistoryJob[]) => void;
+  updateHistoryJob: (jobId: number, updates: Partial<HistoryJob>) => void;
+  removeJob: (jobId: number) => void;
+
+  // Batch rows for the table UI
+  batchRows: BatchRow[];
+  setBatchRows: (rows: BatchRow[]) => void;
+  addBatchRow: (row: BatchRow) => void;
+  updateBatchRow: (id: string, updates: Partial<BatchRow>) => void;
+  removeBatchRow: (id: string) => void;
+  clearBatchRows: () => void;
+
+  // UI settings
+  aspectRatio: string;
+  setAspectRatio: (v: string) => void;
+  videoModel: string;
+  setVideoModel: (v: string) => void;
+  imageModel: string;
+  setImageModel: (v: string) => void;
+  numberOfOutputs: number;
+  setNumberOfOutputs: (v: number) => void;
+  mediaTab: "video" | "image";
+  setMediaTab: (v: "video" | "image") => void;
+
+  // Queue info
+  queueCount: number;
+  setQueueCount: (v: number) => void;
+
+  // Refresh callback — set by page to refresh history on completion
+  onRefreshHistory: (() => void) | null;
+  setOnRefreshHistory: (fn: (() => void) | null) => void;
+
+  // Theme
+  theme: "light" | "dark";
+  toggleTheme: () => void;
+
+  // Toast
+  toast: { message: string; type: "success" | "error" | "info" } | null;
+  showToast: (message: string, type?: "success" | "error" | "info") => void;
+  clearToast: () => void;
+
+  // Upscale tracking (global so it persists across tab switches)
+  upscalingJobIds: Set<number>;
+  addUpscalingJob: (jobId: number) => void;
+  removeUpscalingJob: (jobId: number) => void;
+  isJobUpscaling: (jobId: number) => boolean;
+}
+
+export const useStore = create<AppStore>((set, get) => ({
+  // ── Auth ──
+  user: null,
+  setUser: (user) => {
+    set({ user });
+    if (user) {
+      localStorage.setItem("veo3_token", user.token);
+      localStorage.setItem("veo3_user", JSON.stringify(user));
+    }
+  },
+  logout: () => {
+    set({ user: null, activeJobs: new Map(), history: [], batchRows: [] });
+    localStorage.removeItem("veo3_token");
+    localStorage.removeItem("veo3_user");
+  },
+
+  // ── Active Jobs ──
+  activeJobs: new Map(),
+  addActiveJob: (job) => set((s) => {
+    const next = new Map(s.activeJobs);
+    next.set(job.id, job);
+    return { activeJobs: next };
+  }),
+  updateActiveJob: (id, updates) => set((s) => {
+    const next = new Map(s.activeJobs);
+    const existing = next.get(id);
+    if (existing) next.set(id, { ...existing, ...updates });
+    return { activeJobs: next };
+  }),
+  removeActiveJob: (id) => set((s) => {
+    const next = new Map(s.activeJobs);
+    next.delete(id);
+    return { activeJobs: next };
+  }),
+
+  // ── History ──
+  history: [],
+  setHistory: (jobs) => set({ history: jobs }),
+  updateHistoryJob: (jobId, updates) => set((s) => ({
+    history: s.history.map((j) => j.id === jobId ? { ...j, ...updates } : j),
+  })),
+  removeJob: (jobId) => set((s) => ({ history: s.history.filter((j) => j.id !== jobId) })),
+
+  // ── Batch Rows ──
+  batchRows: [],
+  setBatchRows: (rows) => set({ batchRows: rows }),
+  addBatchRow: (row) => set((s) => ({ batchRows: [...s.batchRows, row] })),
+  updateBatchRow: (id, updates) => set((s) => ({
+    batchRows: s.batchRows.map((r) => r.id === id ? { ...r, ...updates } : r),
+  })),
+  removeBatchRow: (id) => set((s) => ({
+    batchRows: s.batchRows.filter((r) => r.id !== id),
+  })),
+  clearBatchRows: () => set({ batchRows: [] }),
+
+  // ── Settings ──
+  aspectRatio: "16:9",
+  setAspectRatio: (v) => set({ aspectRatio: v }),
+  videoModel: "veo31_fast_lp",
+  setVideoModel: (v) => set({ videoModel: v }),
+  imageModel: "nano_banana_pro",
+  setImageModel: (v) => set({ imageModel: v }),
+  numberOfOutputs: 1,
+  setNumberOfOutputs: (v) => set({ numberOfOutputs: v }),
+  mediaTab: "video",
+  setMediaTab: (v) => set({ mediaTab: v }),
+
+  // ── Queue ──
+  queueCount: 0,
+  setQueueCount: (v) => set({ queueCount: v }),
+
+  // ── Refresh callback ──
+  onRefreshHistory: null,
+  setOnRefreshHistory: (fn) => set({ onRefreshHistory: fn }),
+
+  // ── Theme ──
+  theme: (typeof window !== "undefined" && localStorage.getItem("veo3_theme") as "light" | "dark") || "light",
+  toggleTheme: () => set((s) => {
+    const next = s.theme === "dark" ? "light" : "dark";
+    if (typeof window !== "undefined") localStorage.setItem("veo3_theme", next);
+    return { theme: next };
+  }),
+
+  // ── Toast ──
+  toast: null,
+  showToast: (message, type = "info") => {
+    set({ toast: { message, type } });
+    setTimeout(() => set({ toast: null }), 4000);
+  },
+  clearToast: () => set({ toast: null }),
+
+  // ── Upscale tracking ──
+  upscalingJobIds: new Set(),
+  addUpscalingJob: (jobId) => set((s) => {
+    const next = new Set(s.upscalingJobIds);
+    next.add(jobId);
+    return { upscalingJobIds: next };
+  }),
+  removeUpscalingJob: (jobId) => set((s) => {
+    const next = new Set(s.upscalingJobIds);
+    next.delete(jobId);
+    return { upscalingJobIds: next };
+  }),
+  isJobUpscaling: (jobId) => get().upscalingJobIds.has(jobId),
+}));

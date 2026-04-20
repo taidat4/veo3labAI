@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Browser Pool Manager</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --surface2: #1a1a28;
+      --border: #2a2a3a;
+      --text: #e4e4ef;
+      --text2: #8888a0;
+      --accent: #6c5ce7;
+      --accent2: #a29bfe;
+      --green: #00d2a0;
+      --green-bg: rgba(0, 210, 160, 0.12);
+      --red: #ff6b6b;
+      --red-bg: rgba(255, 107, 107, 0.12);
+      --yellow: #ffd93d;
+      --yellow-bg: rgba(255, 217, 61, 0.12);
+      --blue: #48dbfb;
+      --blue-bg: rgba(72, 219, 251, 0.12);
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(135deg, #12121a 0%, #1a1028 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(16px);
+    }
+
+    .header h1 {
+      font-size: 22px;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent2), var(--blue));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+      display: inline-block;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      50% {
+        opacity: 0.5;
+        transform: scale(1.3);
+      }
+    }
+
+    .refresh-label {
+      color: var(--text2);
+      font-size: 13px;
+    }
+
+    /* ── Main ── */
+    .main {
+      padding: 24px 32px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    /* ── Stats Grid ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 20px;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent);
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    .stat-value.green {
+      color: var(--green);
+    }
+
+    .stat-value.red {
+      color: var(--red);
+    }
+
+    .stat-value.yellow {
+      color: var(--yellow);
+    }
+
+    .stat-value.blue {
+      color: var(--blue);
+    }
+
+    .stat-value.accent {
+      color: var(--accent2);
+    }
+
+    /* ── Section ── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 17px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 8px 18px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #7c6cf7);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      box-shadow: 0 4px 20px rgba(108, 92, 231, 0.4);
+    }
+
+    .btn-green {
+      background: var(--green-bg);
+      color: var(--green);
+      border: 1px solid rgba(0, 210, 160, 0.3);
+    }
+
+    .btn-red {
+      background: var(--red-bg);
+      color: var(--red);
+      border: 1px solid rgba(255, 107, 107, 0.3);
+    }
+
+    .btn-yellow {
+      background: var(--yellow-bg);
+      color: var(--yellow);
+      border: 1px solid rgba(255, 217, 61, 0.3);
+    }
+
+    .btn-sm {
+      padding: 5px 12px;
+      font-size: 12px;
+      border-radius: 8px;
+    }
+
+    /* ── Browser Cards ── */
+    .browser-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .browser-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      transition: border-color 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .browser-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      border-radius: 14px 14px 0 0;
+    }
+
+    .browser-card.idle::before {
+      background: var(--green);
+    }
+
+    .browser-card.busy::before {
+      background: var(--yellow);
+      animation: glow 1.5s ease-in-out infinite;
+    }
+
+    .browser-card.error::before {
+      background: var(--red);
+    }
+
+    .browser-card.starting::before {
+      background: var(--blue);
+      animation: glow 1s ease-in-out infinite;
+    }
+
+    .browser-card.paused::before {
+      background: #666;
+    }
+
+    @keyframes glow {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.4;
+      }
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .card-email {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 200px;
+    }
+
+    .card-badge {
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge-idle {
+      background: var(--green-bg);
+      color: var(--green);
+    }
+
+    .badge-busy {
+      background: var(--yellow-bg);
+      color: var(--yellow);
+    }
+
+    .badge-error {
+      background: var(--red-bg);
+      color: var(--red);
+    }
+
+    .badge-starting {
+      background: var(--blue-bg);
+      color: var(--blue);
+    }
+
+    .badge-paused {
+      background: rgba(150, 150, 170, 0.15);
+      color: #999;
+    }
+
+    /* ── Toggle Switch ── */
+    .toggle-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text2);
+    }
+
+    .toggle-wrap strong {
+      color: var(--text);
+    }
+
+    .toggle {
+      position: relative;
+      width: 42px;
+      height: 22px;
+      background: #333;
+      border-radius: 11px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    .toggle.on {
+      background: var(--green);
+    }
+
+    .toggle::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 18px;
+      height: 18px;
+      background: white;
+      border-radius: 50%;
+      transition: left 0.3s;
+    }
+
+    .toggle.on::after {
+      left: 22px;
+    }
+
+    .card-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .card-stat-item {
+      background: var(--surface2);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .card-stat-label {
+      font-size: 11px;
+      color: var(--text2);
+      margin-bottom: 3px;
+    }
+
+    .card-stat-value {
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Add Account Form ── */
+    .add-form {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 28px;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+
+    .form-group {
+      flex: 1;
+      min-width: 180px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      color: var(--text2);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-group input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.15);
+    }
+
+    .form-group input::placeholder {
+      color: var(--text2);
+      opacity: 0.6;
+    }
+
+    /* ── Queue Info ── */
+    .queue-bar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .queue-info {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .queue-chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text2);
+    }
+
+    .queue-chip strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 20px;
+      color: var(--text);
+      font-size: 13px;
+      z-index: 9999;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s ease;
+      max-width: 360px;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast.success {
+      border-color: var(--green);
+    }
+
+    .toast.error {
+      border-color: var(--red);
+    }
+
+    /* ── Empty State ── */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text2);
+    }
+
+    .empty-state .icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .empty-state p {
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .main {
+        padding: 16px;
+      }
+
+      .header {
+        padding: 16px;
+      }
+
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .browser-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="header">
+    <h1>🖥️ Browser Pool Manager</h1>
+    <div class="header-right">
+      <span class="live-dot"></span>
+      <span class="refresh-label">Auto-refresh 5s</span>
+      <button class="btn btn-primary btn-sm" onclick="fetchStatus()">↻ Refresh</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- Stats Overview -->
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-label">Total Browsers</div>
+        <div class="stat-value accent" id="statTotal">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Idle</div>
+        <div class="stat-value green" id="statIdle">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Busy</div>
+        <div class="stat-value yellow" id="statBusy">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Error</div>
+        <div class="stat-value red" id="statError">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Queue</div>
+        <div class="stat-value blue" id="statQueue">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Active Users</div>
+        <div class="stat-value accent" id="statUsers">-</div>
+      </div>
+    </div>
+
+    <!-- Queue & Limits Bar -->
+    <div class="queue-bar">
+      <div class="queue-info">
+        <div class="queue-chip">👥 Max Users/Acc: <strong id="limUsers">-</strong></div>
+        <div class="queue-chip">🎬 Max Videos/User: <strong id="limVideos">-</strong></div>
+        <div class="queue-chip">🖥️ Max Browsers: <strong id="limBrowsers">-</strong></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div class="toggle-wrap">
+          🧹 Auto Cleanup: <strong id="cleanupLabel">ON</strong>
+          <div class="toggle on" id="cleanupToggle" onclick="toggleCleanup()"></div>
+        </div>
+        <button class="btn btn-yellow btn-sm" onclick="doCleanup()">🧹 Cleanup All</button>
+      </div>
+    </div>
+
+    <!-- Add Account Form -->
+    <div class="add-form">
+      <div class="section-title" style="margin-bottom:14px;">➕ Thêm Account vào Pool</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="text" id="addEmail" placeholder="ultra@gmail.com">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="addPassword" placeholder="••••••••">
+        </div>
+        <div class="form-group" style="flex:0.7;">
+          <label>TOTP Secret (optional)</label>
+          <input type="text" id="addTotp" placeholder="ABCD1234...">
+        </div>
+        <div style="padding-bottom:2px;">
+          <button class="btn btn-primary" onclick="addAccount()">🚀 Thêm & Mở Browser</button>
+        </div>
+      </div>
+      <div class="form-row" style="margin-top:10px;">
+        <div class="form-group" style="flex:1;">
+          <label>🎯 Flow Project URL (tùy chọn — gắn link project cố định để lấy token nhanh)</label>
+          <input type="text" id="addFlowProject" placeholder="https://labs.google/fx/vi/tools/flow/project/xxxxxxxx">
+        </div>
+      </div>
+    </div>
+
+    <!-- Browser Cards -->
+    <div class="section-header">
+      <div class="section-title">🖥️ Browser Slots</div>
+    </div>
+    <div class="browser-grid" id="browserGrid">
+      <div class="empty-state">
+        <div class="icon">🖥️</div>
+        <p>Chưa có browser nào. Thêm account để bắt đầu.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const API = '';
+
+    function showToast(msg, type = 'success') {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast ' + type + ' show';
+      setTimeout(() => el.classList.remove('show'), 3000);
+    }
+
+    function formatUptime(seconds) {
+      if (seconds < 60) return seconds + 's';
+      if (seconds < 3600) return Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      return h + 'h ' + m + 'm';
+    }
+
+    function formatTime(iso) {
+      if (!iso) return '—';
+      try {
+        const d = new Date(iso);
+        return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      } catch { return iso; }
+    }
+
+    async function fetchStatus() {
+      try {
+        const res = await fetch(API + '/api/pool/status');
+        const data = await res.json();
+        renderStatus(data);
+      } catch (e) {
+        showToast('❌ Không thể kết nối Pool Manager', 'error');
+      }
+    }
+
+    function renderStatus(data) {
+      document.getElementById('statTotal').textContent = data.total + '/' + data.maxBrowsers;
+      document.getElementById('statIdle').textContent = data.idle;
+      document.getElementById('statBusy').textContent = data.busy;
+      document.getElementById('statError').textContent = data.error;
+      document.getElementById('statQueue').textContent = data.queueLength;
+      document.getElementById('statUsers').textContent = data.userTracker?.activeUsers || 0;
+
+      document.getElementById('limUsers').textContent = data.userLimits?.maxUsersPerAccount || '-';
+      document.getElementById('limVideos').textContent = data.userLimits?.maxVideosPerUser || '-';
+      document.getElementById('limBrowsers').textContent = data.maxBrowsers || '-';
+
+      // Auto-cleanup toggle state
+      const cleanupToggle = document.getElementById('cleanupToggle');
+      const cleanupLabel = document.getElementById('cleanupLabel');
+      if (data.autoCleanupEnabled !== undefined) {
+        cleanupToggle.className = 'toggle ' + (data.autoCleanupEnabled ? 'on' : '');
+        cleanupLabel.textContent = data.autoCleanupEnabled ? 'ON' : 'OFF';
+        cleanupLabel.style.color = data.autoCleanupEnabled ? 'var(--green)' : 'var(--red)';
+      }
+
+      const grid = document.getElementById('browserGrid');
+
+      if (!data.slots || data.slots.length === 0) {
+        grid.innerHTML = `<div class="empty-state"><div class="icon">🖥️</div><p>Chưa có browser nào trong pool.<br>Thêm account Ultra ở form phía trên hoặc chạy lại để load từ DB.</p></div>`;
+        return;
+      }
+
+      grid.innerHTML = data.slots.map(slot => {
+        const state = slot.state || 'idle';
+        const badgeClass = 'badge-' + state;
+        const credits = slot.creditsRemaining >= 0 ? slot.creditsRemaining : '∞';
+        const creditsColor = slot.creditsRemaining === 0 ? 'color:var(--red)' : slot.creditsRemaining > 0 && slot.creditsRemaining < 10 ? 'color:var(--yellow)' : 'color:var(--green)';
+
+        return `
+      <div class="browser-card ${state}">
+        <div class="card-header">
+          <div class="card-email" title="${slot.email}">${slot.email}</div>
+          <span class="card-badge ${badgeClass}">${state === 'idle' ? '🟢 idle' : state === 'busy' ? '🟡 busy' : state === 'error' ? '🔴 error' : state === 'paused' ? '⏸️ paused' : '🔵 ' + state}</span>
+        </div>
+        <div class="card-stats">
+          <div class="card-stat-item">
+            <div class="card-stat-label">Credits</div>
+            <div class="card-stat-value" style="${creditsColor}">${credits}</div>
+          </div>
+          <div class="card-stat-item">
+            <div class="card-stat-label">Jobs ✅ / ❌</div>
+            <div class="card-stat-value">${slot.jobsCompleted} / ${slot.jobsFailed}</div>
+          </div>
+          <div class="card-stat-item">
+            <div class="card-stat-label">Uptime</div>
+            <div class="card-stat-value">${formatUptime(slot.uptime)}</div>
+          </div>
+          <div class="card-stat-item">
+            <div class="card-stat-label">Last Job</div>
+            <div class="card-stat-value" style="font-size:13px">${formatTime(slot.lastJobAt)}</div>
+          </div>
+        </div>
+        <div class="card-actions">
+          ${state === 'paused'
+            ? `<button class="btn btn-green btn-sm" onclick="resumeSlot('${slot.email}')">▶️ Resume</button>`
+            : state === 'idle'
+              ? `<button class="btn btn-sm" style="background:rgba(150,150,170,0.12);color:#999;border:1px solid rgba(150,150,170,0.3)" onclick="pauseSlot('${slot.email}')">⏸️ Pause</button>`
+              : ''}
+          <button class="btn btn-yellow btn-sm" onclick="cleanupSlot('${slot.email}')">🧹 Clean</button>
+          <button class="btn btn-red btn-sm" onclick="removeAccount('${slot.email}')">🗑️ Xóa</button>
+        </div>
+      </div>
+    `;
+      }).join('');
+    }
+
+    async function addAccount() {
+      const email = document.getElementById('addEmail').value.trim();
+      const password = document.getElementById('addPassword').value.trim();
+      const totpSecret = document.getElementById('addTotp').value.trim();
+      const flowProjectUrl = document.getElementById('addFlowProject').value.trim();
+
+      if (!email || !password) {
+        showToast('❌ Nhập email và password!', 'error');
+        return;
+      }
+
+      showToast('🚀 Đang thêm ' + email + '...');
+      try {
+        const res = await fetch(API + '/api/pool/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, totpSecret, flowProjectUrl })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('✅ Đã thêm ' + email, 'success');
+          document.getElementById('addEmail').value = '';
+          document.getElementById('addPassword').value = '';
+          document.getElementById('addTotp').value = '';
+          document.getElementById('addFlowProject').value = '';
+          setTimeout(fetchStatus, 2000);
+        } else {
+          showToast('❌ ' + (data.error || 'Không thể thêm'), 'error');
+        }
+      } catch (e) { showToast('❌ Lỗi: ' + e.message, 'error'); }
+    }
+
+    async function removeAccount(email) {
+      if (!confirm('Xóa browser ' + email + ' khỏi pool?')) return;
+      try {
+        await fetch(API + '/api/pool/remove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        showToast('🗑️ Đã xóa ' + email);
+        setTimeout(fetchStatus, 1000);
+      } catch (e) { showToast('❌ ' + e.message, 'error'); }
+    }
+
+    async function doCleanup() {
+      showToast('🧹 Đang dọn dẹp...');
+      try {
+        await fetch(API + '/api/pool/cleanup', { method: 'POST' });
+        showToast('✅ Cleanup xong!');
+        setTimeout(fetchStatus, 2000);
+      } catch (e) { showToast('❌ ' + e.message, 'error'); }
+    }
+
+    async function cleanupSlot(email) {
+      showToast('🧹 Cleaning ' + email + '...');
+      try {
+        await fetch(API + '/api/pool/cleanup', { method: 'POST' });
+        showToast('✅ Done');
+        setTimeout(fetchStatus, 2000);
+      } catch (e) { showToast('❌ ' + e.message, 'error'); }
+    }
+
+    async function toggleCleanup() {
+      try {
+        const res = await fetch(API + '/api/pool/toggle-cleanup', { method: 'POST' });
+        const data = await res.json();
+        showToast(data.autoCleanupEnabled ? '✅ Auto-cleanup BẬT' : '⚠️ Auto-cleanup TẮT', data.autoCleanupEnabled ? 'success' : 'error');
+        fetchStatus();
+      } catch (e) { showToast('❌ ' + e.message, 'error'); }
+    }
+
+    async function pauseSlot(email) {
+      try {
+        const res = await fetch(API + '/api/pool/pause', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('⏸️ Đã tạm dừng ' + email);
+        } else {
+          showToast('❌ Không thể pause (đang busy?)', 'error');
+        }
+        fetchStatus();
+      } catch (e) { showToast('❌ ' + e.message, 'error'); }
+    }
+
+    async function resumeSlot(email) {
+      try {
+        const res = await fetch(API + '/api/pool/resume', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('▶️ Đã tiếp tục ' + email);
+        } else {
+          showToast('❌ Không thể resume', 'error');
+        }
+        fetchStatus();
+      } catch (e) { showToast('❌ ' + e.message, 'error'); }
+    }
+
+    // Auto-refresh every 5 seconds
+    fetchStatus();
+    setInterval(fetchStatus, 5000);
+  </script>
+</body>
+
+</html>
