@@ -5,7 +5,7 @@
  * - Admin: Secret key → Admin token (sessionStorage admin_token)
  */
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 interface RequestOptions {
   method?: string;
@@ -204,6 +204,12 @@ export const adminApi = {
 
 // ── WebSocket URL ──
 export function getWSUrl(userId: number, token: string): string {
-  const wsBase = API_BASE.replace("http", "ws");
-  return `${wsBase}/ws/progress/${userId}?token=${token}`;
+  if (API_BASE) {
+    // Dev mode: API_BASE = "http://localhost:8000"
+    const wsBase = API_BASE.replace("http", "ws");
+    return `${wsBase}/ws/progress/${userId}?token=${token}`;
+  }
+  // Production: derive from current page URL
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${window.location.host}/ws/progress/${userId}?token=${token}`;
 }
