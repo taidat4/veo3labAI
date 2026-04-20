@@ -27,6 +27,7 @@ class MBBankService:
                 "username": settings.MBBANK_USERNAME,
                 "password": settings.MBBANK_PASSWORD,
                 "accountNo": settings.MBBANK_ACCOUNT,
+                "user": settings.MBBANK_USERNAME,
                 "sessionId": settings.MBBANK_SESSION_ID,
                 "id_run": settings.MBBANK_ID_RUN,
                 "token": settings.MBBANK_TOKEN,
