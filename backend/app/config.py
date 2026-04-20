@@ -34,10 +34,8 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 1440  # 24 giờ
 
-    # ── Admin ──
-    ADMIN_USERNAME: str = "admin"
-    ADMIN_PASSWORD: str = "admin123"
-    ADMIN_SECRET_KEY: str = "UF-X9k$mZ2vR!pL7@wQ4dF8hJ3nY6bT0cG5eA1iK#sU&oW*xV"  # 50-char crypto key
+    # ── Admin (chỉ cần key để vào dashboard, không cần username/password) ──
+    ADMIN_SECRET_KEY: str = "VEO3-ADM-00B85D5FEF95278C1EA4DF9DAB9E5CCF"
 
     # ── Captcha — Dual Provider (legacy, not needed with NanoAI) ──
     CAPTCHA_PROVIDER: str = "capsolver"  # "capsolver" | "2captcha" | "omocaptcha"
@@ -64,6 +62,14 @@ class Settings(BaseSettings):
     R2_SECRET_KEY: str = ""
     R2_BUCKET: str = "veo3-videos"
     R2_PUBLIC_URL: str = ""
+
+    # ── MBBank Payment ──
+    MBBANK_API_URL: str = "https://apicanhan.com/api/mbbankv3"
+    MBBANK_API_KEY: str = ""
+    MBBANK_USERNAME: str = ""
+    MBBANK_PASSWORD: str = ""
+    MBBANK_ACCOUNT: str = ""
+    MBBANK_NAME: str = "MB Bank"
 
     # ── Google Flow API ──
     FLOW_API_BASE: str = "https://aisandbox-pa.googleapis.com"

@@ -53,9 +53,6 @@ async def lifespan(app: FastAPI):
     await cleanup_stuck_jobs(max_age_minutes=10)
     logger.info("[OK] Stuck jobs cleaned up")
 
-    # Tạo admin user mặc định
-    await _ensure_admin_user()
-
     logger.info(f"[OK] Server ready at http://localhost:{settings.PORT}")
     logger.info(f"[DOCS] http://localhost:{settings.PORT}/docs")
 
@@ -177,6 +174,10 @@ app.include_router(video_router)
 app.include_router(admin_router)
 app.include_router(ws_router)
 app.include_router(public_api_router)
+
+# ── Deposit / Payment ──
+from app.routes.deposit import router as deposit_router
+app.include_router(deposit_router)
 
 # ── Static files (upscaled videos) ──
 import os

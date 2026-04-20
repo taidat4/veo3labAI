@@ -134,6 +134,14 @@ export const api = {
   generateApiKey: () => request("/api/auth/me/generate-api-key", { method: "POST" }),
   changePassword: (current_password: string, new_password: string) =>
     request("/api/auth/me/change-password", { method: "POST", body: { current_password, new_password } }),
+
+  // ── Deposit / Payment ──
+  requestDeposit: (amount: number) =>
+    request("/api/deposit/request", { method: "POST", body: { amount } }),
+  verifyDeposit: (token: string) =>
+    request(`/api/deposit/verify/${token}`, { method: "POST" }),
+  getDepositStatus: (token: string) =>
+    request(`/api/deposit/status/${token}`),
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
