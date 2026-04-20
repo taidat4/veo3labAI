@@ -10,7 +10,13 @@ from app.config import get_settings
 settings = get_settings()
 
 # ── Detect SQLite vs PostgreSQL ──
-is_sqlite = "sqlite" in settings.DATABASE_URL
+# Railway gives postgres:// but SQLAlchemy needs postgresql+asyncpg://
+db_url = settings.DATABASE_URL
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+is_sqlite = "sqlite" in db_url
 
 # ── Async SQLAlchemy engine ──
 engine_kwargs = {
@@ -23,7 +29,7 @@ if not is_sqlite:
         "pool_pre_ping": True,
     })
 
-engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
+engine = create_async_engine(db_url, **engine_kwargs)
 
 # ── Session factory ──
 async_session_factory = async_sessionmaker(

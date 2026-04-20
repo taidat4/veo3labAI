@@ -75,7 +75,7 @@ async def _auto_migrate():
         ("ultra_accounts", "flow_project_url", "VARCHAR(500)"),
         ("users", "api_key", "VARCHAR(64)"),
         ("users", "plan_id", "INTEGER"),
-        ("users", "plan_expires_at", "DATETIME"),
+        ("users", "plan_expires_at", "TIMESTAMP"),
     ]
 
     async with engine.begin() as conn:
@@ -92,20 +92,24 @@ async def _auto_migrate():
 
         # Create subscription_plans table if not exists
         try:
-            await conn.execute(__import__("sqlalchemy").text("""
+            # Use SERIAL for PostgreSQL, fallback works for SQLite too
+            from app.database import is_sqlite
+            pk_type = "INTEGER PRIMARY KEY AUTOINCREMENT" if is_sqlite else "SERIAL PRIMARY KEY"
+            bool_default = "DEFAULT 1" if is_sqlite else "DEFAULT TRUE"
+            await conn.execute(__import__("sqlalchemy").text(f"""
                 CREATE TABLE IF NOT EXISTS subscription_plans (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {pk_type},
                     name VARCHAR(100) NOT NULL,
                     description TEXT,
                     credits INTEGER NOT NULL,
                     price INTEGER NOT NULL,
                     duration_days INTEGER DEFAULT 30,
                     max_concurrent INTEGER DEFAULT 4,
-                    features JSON,
-                    is_active BOOLEAN DEFAULT 1,
+                    features TEXT,
+                    is_active BOOLEAN {bool_default},
                     sort_order INTEGER DEFAULT 0,
-                    created_at DATETIME,
-                    updated_at DATETIME
+                    created_at TIMESTAMP,
+                    updated_at TIMESTAMP
                 )
             """))
             logger.info("[MIGRATE] subscription_plans table ensured")

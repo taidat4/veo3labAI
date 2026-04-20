@@ -28,6 +28,5 @@ RUN npm run build
 EXPOSE 8080
 
 # Start both: Python backend on 8000, Next.js on 8080
-# DATABASE_URL points to /data/ so it persists across deploys (Railway Volume)
-ENV DATABASE_URL=sqlite+aiosqlite:////data/veo3.db
+# DATABASE_URL is set by Railway Postgres plugin automatically
 CMD bash -c "(cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000) & sleep 3 && npm start"
