@@ -53,7 +53,15 @@ async function request<T = any>(path: string, opts: RequestOptions = {}): Promis
     throw new Error("Unauthorized");
   }
 
-  const data = await res.json();
+  // Handle non-JSON responses (e.g. 500 Internal Server Error)
+  const text = await res.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    if (!res.ok) throw new Error(text || `Server error (${res.status})`);
+    throw new Error("Invalid JSON response from server");
+  }
   if (!res.ok) throw new Error(data.detail || data.error || "Request failed");
   return data;
 }
