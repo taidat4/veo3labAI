@@ -514,6 +514,79 @@ async def get_public_credit_costs(db: AsyncSession = Depends(get_db)):
     }
 
 
+@router.get("/credit-rate")
+async def get_credit_rate(db: AsyncSession = Depends(get_db)):
+    """Public: get VND to credits exchange rate."""
+    from app.models import SystemSetting
+    rate_r = await db.execute(select(SystemSetting).where(SystemSetting.key == "credit_exchange_rate"))
+    rate_s = rate_r.scalar_one_or_none()
+    rate = int(rate_s.value) if rate_s else 100
+    return {"rate": rate, "per": 1000, "min_amount": 1000}
+
+
+@router.post("/buy-credits")
+async def buy_credits(
+    request: Request,
+    user_id: int = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Buy credits using VND balance."""
+    from app.models import User, BalanceHistory, SystemSetting
+
+    body = await request.json()
+    amount = int(body.get("amount", 0))
+
+    if amount < 1000:
+        raise HTTPException(400, "Số tiền tối thiểu là 1.000đ")
+
+    rate_r = await db.execute(select(SystemSetting).where(SystemSetting.key == "credit_exchange_rate"))
+    rate_s = rate_r.scalar_one_or_none()
+    rate = int(rate_s.value) if rate_s else 100
+
+    credits_to_add = int(amount / 1000 * rate)
+    if credits_to_add <= 0:
+        raise HTTPException(400, "Số tiền quá nhỏ")
+
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one()
+
+    if user.balance < amount:
+        raise HTTPException(400, f"Số dư không đủ. Cần {amount:,}đ, hiện có {user.balance:,}đ")
+
+    prev_balance = user.balance
+    user.balance -= amount
+
+    try:
+        old_credits = user.credits or 0
+        user.credits = old_credits + credits_to_add
+    except Exception:
+        from sqlalchemy import text as sa_text
+        old_credits = 0
+        await db.execute(sa_text(
+            f"UPDATE users SET credits = COALESCE(credits, 0) + {credits_to_add} WHERE id = {user_id}"
+        ))
+
+    db.add(BalanceHistory(
+        user_id=user_id,
+        previous_amount=prev_balance,
+        changed_amount=-amount,
+        current_amount=user.balance,
+        content=f"Mua {credits_to_add:,} credits ({amount:,}đ)",
+        type="credit_purchase",
+    ))
+
+    await db.commit()
+    await db.refresh(user)
+    new_credits = getattr(user, 'credits', 0) or 0
+
+    return {
+        "success": True,
+        "message": f"Đã mua {credits_to_add:,} credits!",
+        "credits_added": credits_to_add,
+        "new_balance": user.balance,
+        "new_credits": new_credits,
+    }
+
+
 @router.get("/plans")
 async def list_public_plans(db: AsyncSession = Depends(get_db)):
     """Public: list active subscription plans for pricing page."""

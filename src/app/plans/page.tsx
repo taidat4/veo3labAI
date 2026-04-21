@@ -47,6 +47,13 @@ export default function PlansPage() {
   const [checkCount, setCheckCount] = useState(0);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Buy credits state
+  const [showBuyCredits, setShowBuyCredits] = useState(false);
+  const [buyAmount, setBuyAmount] = useState("");
+  const [creditRate, setCreditRate] = useState(100); // credits per 1000đ
+  const [buyingCredits, setBuyingCredits] = useState(false);
+  const [buyingPlanId, setBuyingPlanId] = useState<number | null>(null);
+
   // Auth
   useEffect(() => {
     const stored = localStorage.getItem("veo3_user");
@@ -68,6 +75,18 @@ export default function PlansPage() {
     })();
   }, []);
 
+  // Fetch credit rate
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/credit-rate");
+        if (res.ok) {
+          const d = await res.json();
+          setCreditRate(d.rate || 100);
+        }
+      } catch { }
+    })();
+  }, []);
   // Deposit countdown
   useEffect(() => {
     if (depositState !== "qr" && depositState !== "checking") return;
@@ -266,28 +285,24 @@ export default function PlansPage() {
               </div>
             )}
 
-            {/* Credit packs */}
-            {!loadingPlans && creditPacks.length > 0 && (
+
+            {/* Buy Credits Button */}
+            {!loadingPlans && (
               <div className="max-w-lg mx-auto">
-                <h2 className="text-base font-bold mb-4 flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
-                  <span className="material-symbols-rounded" style={{ color: "#f59e0b" }}>shopping_cart</span>Mua thêm Credit
-                </h2>
-                {creditPacks.map(pack => (
-                  <div key={pack.id} className="rounded-2xl p-4 flex items-center justify-between"
-                    style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.08), rgba(249,115,22,0.05))", border: "1px solid rgba(245,158,11,0.2)" }}>
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #f59e0b, #f97316)" }}>
-                        <span className="material-symbols-rounded text-xl text-white">bolt</span>
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{pack.name}</h3>
-                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>{pack.description}</p>
-                      </div>
+                <button onClick={() => setShowBuyCredits(true)}
+                  className="w-full rounded-2xl p-4 flex items-center justify-between transition-all hover:scale-[1.01]"
+                  style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.08), rgba(249,115,22,0.05))", border: "1px solid rgba(245,158,11,0.2)" }}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #f59e0b, #f97316)" }}>
+                      <span className="material-symbols-rounded text-xl text-white">bolt</span>
                     </div>
-                    <button onClick={() => handleBuyPlan(pack)} className="px-4 py-2 rounded-xl text-sm font-semibold text-white"
-                      style={{ background: "linear-gradient(135deg, #f59e0b, #f97316)" }}>Mua ngay</button>
+                    <div className="text-left">
+                      <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Mua thêm Credit</h3>
+                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>Dùng số dư VND để mua credits ({creditRate} credits / 1.000đ)</p>
+                    </div>
                   </div>
-                ))}
+                  <span className="material-symbols-rounded text-xl" style={{ color: "#f59e0b" }}>arrow_forward</span>
+                </button>
               </div>
             )}
           </>
@@ -419,6 +434,113 @@ export default function PlansPage() {
           </div>
         )}
       </main>
+
+      {/* ════════════════ MODAL: MUA CREDIT ════════════════ */}
+      {showBuyCredits && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowBuyCredits(false); }}>
+          <div className="w-full max-w-md rounded-2xl p-6" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
+                <span className="material-symbols-rounded" style={{ color: "#f59e0b" }}>bolt</span>
+                Mua Credit
+              </h2>
+              <button onClick={() => setShowBuyCredits(false)} className="btn-ghost !p-1.5">
+                <span className="material-symbols-rounded text-lg">close</span>
+              </button>
+            </div>
+
+            <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
+              Tỷ giá: <strong style={{ color: "#f59e0b" }}>{creditRate} credits</strong> / 1.000đ — Tối thiểu 1.000đ
+            </p>
+
+            {/* Quick amounts */}
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              {[5000, 10000, 50000, 100000].map(amt => (
+                <button key={amt} onClick={() => setBuyAmount(String(amt))}
+                  className="py-2 rounded-lg text-xs font-medium transition-all"
+                  style={{
+                    background: buyAmount === String(amt) ? "rgba(245,158,11,0.15)" : "var(--bg-tertiary)",
+                    color: buyAmount === String(amt) ? "#f59e0b" : "var(--text-secondary)",
+                    border: buyAmount === String(amt) ? "1px solid rgba(245,158,11,0.4)" : "1px solid var(--border-subtle)",
+                  }}>
+                  {(amt / 1000).toLocaleString()}K
+                </button>
+              ))}
+            </div>
+
+            {/* Custom input */}
+            <div className="mb-4">
+              <label className="text-xs font-medium mb-1.5 block" style={{ color: "var(--text-muted)" }}>Số tiền (VNĐ)</label>
+              <input type="number" value={buyAmount} onChange={e => setBuyAmount(e.target.value)}
+                placeholder="Nhập số tiền..." min="1000" step="1000"
+                className="input-field !text-lg !font-bold" />
+            </div>
+
+            {/* Preview */}
+            {parseInt(buyAmount) >= 1000 && (
+              <div className="rounded-xl p-4 mb-4 flex items-center justify-between"
+                style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.08), rgba(249,115,22,0.05))", border: "1px solid rgba(245,158,11,0.15)" }}>
+                <div>
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>Bạn sẽ nhận được</p>
+                  <p className="text-2xl font-extrabold" style={{ color: "#f59e0b" }}>
+                    {Math.floor(parseInt(buyAmount) / 1000 * creditRate).toLocaleString()} credits
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>Trừ từ số dư</p>
+                  <p className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>
+                    {parseInt(buyAmount).toLocaleString()}đ
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <button disabled={buyingCredits || !buyAmount || parseInt(buyAmount) < 1000}
+              onClick={async () => {
+                if (!user) return;
+                setBuyingCredits(true);
+                try {
+                  const token = localStorage.getItem("veo3_token");
+                  const res = await fetch("/api/buy-credits", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                    body: JSON.stringify({ amount: parseInt(buyAmount) }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.detail || "Lỗi mua credit");
+                  showToast(`🎉 ${data.message}`, "success");
+                  const stored = localStorage.getItem("veo3_user");
+                  if (stored && token) {
+                    const u = JSON.parse(stored);
+                    u.balance = data.new_balance;
+                    u.credits = data.new_credits;
+                    localStorage.setItem("veo3_user", JSON.stringify(u));
+                    setUser({ ...u, token });
+                  }
+                  setShowBuyCredits(false);
+                  setBuyAmount("");
+                } catch (e: any) {
+                  showToast(e.message || "Lỗi", "error");
+                } finally {
+                  setBuyingCredits(false);
+                }
+              }}
+              className="w-full py-3 rounded-xl text-sm font-bold text-white transition-all flex items-center justify-center gap-2"
+              style={{
+                background: buyingCredits || !buyAmount || parseInt(buyAmount) < 1000
+                  ? "var(--bg-tertiary)" : "linear-gradient(135deg, #f59e0b, #f97316)",
+                opacity: buyingCredits || !buyAmount || parseInt(buyAmount) < 1000 ? 0.5 : 1,
+              }}>
+              {buyingCredits ? <span className="spinner !w-4 !h-4 !border-white/20 !border-t-white" /> : (
+                <span className="material-symbols-rounded text-lg">shopping_cart</span>
+              )}
+              {buyingCredits ? "Đang xử lý..." : "Mua Credit"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
