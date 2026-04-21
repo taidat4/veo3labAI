@@ -121,7 +121,9 @@ export function VideoCard({ job, compact = false, selectable = false, selected =
           addUpscalingJob(job.id);
           showToast(`⏳ Đang upscale ảnh lên ${quality.toUpperCase()}...`, "info");
           const resp = await api.upscaleImage(job.id, resMap[quality]);
-          if (resp.success && resp.upscale_url) {
+
+          // ★ Instant result
+          if (resp.success && resp.upscale_url && resp.status === "completed") {
             const a = document.createElement("a");
             a.href = resp.upscale_url;
             a.download = `image-${job.id}-${quality}.png`;
@@ -132,6 +134,43 @@ export function VideoCard({ job, compact = false, selectable = false, selected =
             removeUpscalingJob(job.id);
             return;
           }
+
+          // ★ Async processing — poll for completion (same as video)
+          if (resp.status === "processing" || resp.success) {
+            showToast("⏳ Đang upscale ảnh (~1-2 phút)...", "info");
+            updateHistoryJob(job.id, { upscale_status: "processing" });
+            let imgPollCount = 0;
+            const MAX_IMG_POLLS = 40; // ~5 phút (8s × 40)
+            const imgPollInterval = setInterval(async () => {
+              imgPollCount++;
+              if (imgPollCount > MAX_IMG_POLLS) {
+                clearInterval(imgPollInterval);
+                removeUpscalingJob(job.id);
+                updateHistoryJob(job.id, { upscale_status: undefined });
+                showToast("⏰ Upscale ảnh timeout — thử lại sau", "error");
+                return;
+              }
+              try {
+                const st = await api.getUpscaleStatus(job.id);
+                if (st.status === "completed" && st.upscale_url) {
+                  clearInterval(imgPollInterval);
+                  removeUpscalingJob(job.id);
+                  updateHistoryJob(job.id, { upscale_status: "completed", upscale_url: st.upscale_url });
+                  showToast(`✅ Upscale ảnh ${quality.toUpperCase()} hoàn tất! Nhấn tải lại`, "success");
+                } else if (st.status === "not_started" && st.upscale_error) {
+                  clearInterval(imgPollInterval);
+                  removeUpscalingJob(job.id);
+                  updateHistoryJob(job.id, { upscale_status: undefined });
+                  showToast(`❌ ${st.upscale_error}`, "error");
+                }
+              } catch {
+                clearInterval(imgPollInterval);
+                removeUpscalingJob(job.id);
+              }
+            }, 8000);
+            return;
+          }
+
           removeUpscalingJob(job.id);
           showToast("❌ Upscale ảnh thất bại", "error");
         } catch (_e) {
