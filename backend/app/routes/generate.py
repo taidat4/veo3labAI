@@ -487,3 +487,32 @@ async def get_queue_status(request: Request):
         "max": 8,
         "waiting": waiting_count,
     }
+
+
+@router.get("/plans")
+async def list_public_plans(db: AsyncSession = Depends(get_db)):
+    """Public: list active subscription plans for pricing page."""
+    from app.models import SubscriptionPlan
+    result = await db.execute(
+        select(SubscriptionPlan)
+        .where(SubscriptionPlan.is_active == True)
+        .order_by(SubscriptionPlan.sort_order)
+    )
+    plans = result.scalars().all()
+    return {
+        "plans": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "description": p.description,
+                "credits": p.credits,
+                "price": p.price,
+                "duration_days": p.duration_days,
+                "max_concurrent": p.max_concurrent,
+                "features": p.features if isinstance(p.features, list) else (
+                    __import__("json").loads(p.features) if isinstance(p.features, str) else []
+                ),
+            }
+            for p in plans
+        ]
+    }

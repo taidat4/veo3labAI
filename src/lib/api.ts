@@ -142,6 +142,9 @@ export const api = {
     request(`/api/deposit/verify/${token}`, { method: "POST" }),
   getDepositStatus: (token: string) =>
     request(`/api/deposit/status/${token}`),
+
+  // ── Plans / Pricing ──
+  getPlans: () => request("/api/plans"),
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
