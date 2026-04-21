@@ -116,6 +116,40 @@ export function VideoCard({ job, compact = false, selectable = false, selected =
         "4k": "RESOLUTION_4K",
       };
 
+      // ★ If already upscaled to this quality → download directly!
+      const upscaledRes = (job.upscale_resolution || "").toLowerCase();
+      const isAlreadyUpscaled = hasUpscaleUrl && (
+        (quality === "1k" && upscaledRes.includes("1k")) ||
+        (quality === "2k" && upscaledRes.includes("2k")) ||
+        (quality === "4k" && upscaledRes.includes("4k"))
+      );
+
+      if (isAlreadyUpscaled && job.upscale_url) {
+        // Download upscaled image directly
+        try {
+          showToast(`⏳ Đang tải ảnh ${quality.toUpperCase()}...`, "info");
+          const resp = await fetch(job.upscale_url);
+          const blob = await resp.blob();
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = `image-${job.id}-${quality}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(a.href);
+          showToast(`✅ Đã tải ảnh ${quality.toUpperCase()}!`, "success");
+        } catch {
+          const a = document.createElement("a");
+          a.href = job.upscale_url;
+          a.download = `image-${job.id}-${quality}.png`;
+          a.target = "_blank";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
+        return;
+      }
+
       if (resMap[quality]) {
         try {
           addUpscalingJob(job.id);
@@ -132,15 +166,16 @@ export function VideoCard({ job, compact = false, selectable = false, selected =
             document.body.removeChild(a);
             showToast(`✅ Đã tải ảnh ${quality.toUpperCase()}!`, "success");
             removeUpscalingJob(job.id);
+            updateHistoryJob(job.id, { upscale_status: "completed", upscale_url: resp.upscale_url, upscale_resolution: quality.toUpperCase() });
             return;
           }
 
-          // ★ Async processing — poll for completion (same as video)
+          // ★ Async processing — poll for completion
           if (resp.status === "processing" || resp.success) {
             showToast("⏳ Đang upscale ảnh (~1-2 phút)...", "info");
             updateHistoryJob(job.id, { upscale_status: "processing" });
             let imgPollCount = 0;
-            const MAX_IMG_POLLS = 40; // ~5 phút (8s × 40)
+            const MAX_IMG_POLLS = 40;
             const imgPollInterval = setInterval(async () => {
               imgPollCount++;
               if (imgPollCount > MAX_IMG_POLLS) {
@@ -176,8 +211,8 @@ export function VideoCard({ job, compact = false, selectable = false, selected =
         } catch (_e) {
           removeUpscalingJob(job.id);
           showToast("❌ Lỗi upscale ảnh, tải ảnh gốc...", "error");
-          // Fallback to original
         }
+        return;
       }
 
       // Original download
@@ -340,15 +375,17 @@ export function VideoCard({ job, compact = false, selectable = false, selected =
   }
 
   // Download options based on media type
+  // Mark upscaled resolutions as "ready" (green)
+  const upscaledRes = (job.upscale_resolution || "").toLowerCase();
   const downloadOptions = isImage
     ? [
-      { val: "original", label: "Gốc", desc: "Nhanh" },
-      { val: "1k", label: "1K", desc: "HD" },
-      { val: "2k", label: "2K", desc: "Ultra HD" },
-      { val: "4k", label: "4K", desc: "Max" },
+      { val: "original", label: "Gốc", desc: "Nhanh", ready: false },
+      { val: "1k", label: "1K", desc: hasUpscaleUrl && upscaledRes.includes("1k") ? "✅ Sẵn sàng" : "HD", ready: hasUpscaleUrl && upscaledRes.includes("1k") },
+      { val: "2k", label: "2K", desc: hasUpscaleUrl && upscaledRes.includes("2k") ? "✅ Sẵn sàng" : "Ultra HD", ready: hasUpscaleUrl && upscaledRes.includes("2k") },
+      { val: "4k", label: "4K", desc: hasUpscaleUrl && upscaledRes.includes("4k") ? "✅ Sẵn sàng" : "Max", ready: hasUpscaleUrl && upscaledRes.includes("4k") },
     ]
     : [
-      { val: "720", label: "720p", desc: "Nhanh" },
+      { val: "720", label: "720p", desc: "Nhanh", ready: false },
       { val: "1080", label: "1080p", desc: hasUpscaleUrl ? "✅ Sẵn sàng" : "HD", ready: hasUpscaleUrl },
     ];
 
