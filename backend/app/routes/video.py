@@ -1626,24 +1626,12 @@ async def upscale_image(
                 job.params = params
                 await db.commit()
 
-                # ★ Start background poll thread (same pattern as video upscale)
-                import threading
-                def _bg_poll_image_upscale():
-                    import asyncio as _aio
-                    loop = _aio.new_event_loop()
-                    _aio.set_event_loop(loop)
-                    try:
-                        loop.run_until_complete(
-                            _poll_image_upscale_nanoai(job_id, task_id, account["email"], target_resolution, cache_key)
-                        )
-                    except Exception as e:
-                        logger.error(f"🔴 Image upscale bg error: {e}")
-                    finally:
-                        loop.close()
-
-                t = threading.Thread(target=_bg_poll_image_upscale, daemon=True)
-                t.start()
-                logger.info(f"🚀 Image upscale background thread started for job {job_id}")
+                # ★ Start background poll as asyncio task (NOT thread — DB sessions need same loop)
+                import asyncio
+                asyncio.create_task(
+                    _poll_image_upscale_nanoai(job_id, task_id, account["email"], target_resolution, cache_key)
+                )
+                logger.info(f"🚀 Image upscale background task started for job {job_id}")
 
                 return {
                     "success": True,
