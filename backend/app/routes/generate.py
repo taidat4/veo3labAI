@@ -18,6 +18,14 @@ from app.schemas import (
     JobStatusResponse, JobListResponse, MediaModel,
 )
 from app.auth import get_current_user
+
+
+def _resolution_label(raw: str) -> str | None:
+    """Convert 'RESOLUTION_4K' → '4K' for frontend badge."""
+    if not raw:
+        return None
+    mapping = {"RESOLUTION_1K": "1K", "RESOLUTION_2K": "2K", "RESOLUTION_4K": "4K"}
+    return mapping.get(raw, raw.replace("RESOLUTION_", "") if "RESOLUTION_" in raw else None)
 from app.rate_limiter import RateLimiter
 from app.veo_template import MODEL_PRICING, VIDEO_MODEL_MAP, IMAGE_MODEL_MAP, is_image_model
 
@@ -314,6 +322,7 @@ async def get_job_status(
     # Derive upscale status from params
     upscale_status = None
     upscale_url = params.get("upscale_url")
+    upscale_resolution = _resolution_label(params.get("upscale_resolution", ""))
     if upscale_url:
         upscale_status = "completed"
     elif params.get("upscale_task_id"):
@@ -333,6 +342,7 @@ async def get_job_status(
         cost=job.cost,
         upscale_status=upscale_status,
         upscale_url=upscale_url,
+        upscale_resolution=upscale_resolution,
         created_at=job.created_at,
         started_at=job.started_at,
         finished_at=job.finished_at,
@@ -375,11 +385,12 @@ async def list_jobs(
     def _upscale_info(j):
         p = j.params or {}
         url = p.get("upscale_url")
+        res = _resolution_label(p.get("upscale_resolution", ""))
         if url:
-            return "completed", url
+            return "completed", url, res
         if p.get("upscale_task_id"):
-            return "processing", None
-        return None, None
+            return "processing", None, res
+        return None, None, None
 
     return JobListResponse(
         jobs=[
@@ -397,6 +408,7 @@ async def list_jobs(
                 cost=j.cost,
                 upscale_status=_upscale_info(j)[0],
                 upscale_url=_upscale_info(j)[1],
+                upscale_resolution=_upscale_info(j)[2],
                 created_at=j.created_at,
                 started_at=j.started_at,
                 finished_at=j.finished_at,

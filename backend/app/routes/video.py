@@ -488,11 +488,13 @@ async def upscale_status(
         raise HTTPException(status_code=404, detail="Video not found")
 
     params = job.params or {}
+    res = params.get("upscale_resolution", "")
+    res_label = {"RESOLUTION_1K": "1K", "RESOLUTION_2K": "2K", "RESOLUTION_4K": "4K"}.get(res, "")
 
     if params.get("upscale_url"):
-        return {"status": "completed", "upscale_url": params["upscale_url"]}
+        return {"status": "completed", "upscale_url": params["upscale_url"], "upscale_resolution": res_label}
     elif params.get("upscale_task_id"):
-        return {"status": "processing", "message": "Đang tăng độ phân giải..."}
+        return {"status": "processing", "message": "Đang tăng độ phân giải...", "upscale_resolution": res_label}
     else:
         return {"status": "not_started", "upscale_error": params.get("upscale_error", "")}
 

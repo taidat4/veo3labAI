@@ -40,6 +40,7 @@ export interface HistoryJob {
   error?: string;
   upscale_status?: string;  // "processing" | "completed" | null
   upscale_url?: string;     // URL after upscale done
+  upscale_resolution?: string;  // "1K" | "2K" | "4K" | null
   created_at: string;
   started_at?: string;
   finished_at?: string;

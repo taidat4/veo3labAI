@@ -109,6 +109,7 @@ class JobStatusResponse(BaseModel):
     cost: int = 0
     upscale_status: Optional[str] = None  # "processing" | "completed" | None
     upscale_url: Optional[str] = None     # URL after upscale done
+    upscale_resolution: Optional[str] = None  # "1K" | "2K" | "4K" | None
     created_at: datetime
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None

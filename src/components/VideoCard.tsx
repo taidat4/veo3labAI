@@ -155,7 +155,7 @@ export function VideoCard({ job, compact = false, selectable = false, selected =
                 if (st.status === "completed" && st.upscale_url) {
                   clearInterval(imgPollInterval);
                   removeUpscalingJob(job.id);
-                  updateHistoryJob(job.id, { upscale_status: "completed", upscale_url: st.upscale_url });
+                  updateHistoryJob(job.id, { upscale_status: "completed", upscale_url: st.upscale_url, upscale_resolution: st.upscale_resolution || quality.toUpperCase() });
                   showToast(`✅ Upscale ảnh ${quality.toUpperCase()} hoàn tất! Nhấn tải lại`, "success");
                 } else if (st.status === "not_started" && st.upscale_error) {
                   clearInterval(imgPollInterval);
@@ -424,6 +424,12 @@ export function VideoCard({ job, compact = false, selectable = false, selected =
               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold"
                 style={{ background: "rgba(34,197,94,0.9)", color: "white" }}>
                 ✅ HD
+              </span>
+            )}
+            {hasUpscaleUrl && isImage && job.upscale_resolution && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold"
+                style={{ background: "rgba(59,130,246,0.9)", color: "white" }}>
+                ✅ {job.upscale_resolution}
               </span>
             )}
             <span className="badge badge-neon !text-[10px]">
