@@ -105,7 +105,7 @@ export default function PlansPage() {
 
   const handleCreateDeposit = async () => {
     const amount = customAmount ? parseInt(customAmount) : selectedAmount;
-    if (amount < 10000) { showToast("Số tiền tối thiểu 10,000đ", "error"); return; }
+    if (amount < 2000) { showToast("Số tiền tối thiểu 2,000đ", "error"); return; }
     setDepositLoading(true);
     try {
       const token = localStorage.getItem("veo3_token");
@@ -309,7 +309,7 @@ export default function PlansPage() {
                   <label className="text-xs font-semibold block mb-2" style={{ color: "var(--text-muted)" }}>Hoặc nhập tùy chỉnh</label>
                   <div className="flex items-center gap-3">
                     <input type="number" value={customAmount} onChange={e => setCustomAmount(e.target.value)}
-                      placeholder="Nhập số tiền..." className="input-field flex-1" min={10000} step={10000} />
+                      placeholder="Nhập số tiền..." className="input-field flex-1" min={2000} step={1000} />
                     <span className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>VNĐ</span>
                   </div>
                 </div>
@@ -317,9 +317,9 @@ export default function PlansPage() {
                   <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Số tiền nạp</span>
                   <span className="text-lg font-bold" style={{ color: "#10b981" }}>+{activeAmount.toLocaleString()}đ</span>
                 </div>
-                <button onClick={handleCreateDeposit} disabled={depositLoading || activeAmount < 10000}
+                <button onClick={handleCreateDeposit} disabled={depositLoading || activeAmount < 2000}
                   className="w-full py-3.5 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2"
-                  style={{ background: activeAmount >= 10000 ? "linear-gradient(135deg, #10b981, #059669)" : "var(--bg-tertiary)", color: activeAmount >= 10000 ? "white" : "var(--text-muted)" }}>
+                  style={{ background: activeAmount >= 2000 ? "linear-gradient(135deg, #10b981, #059669)" : "var(--bg-tertiary)", color: activeAmount >= 2000 ? "white" : "var(--text-muted)" }}>
                   {depositLoading ? <span className="spinner !w-5 !h-5 !border-white/20 !border-t-white" /> : <span className="material-symbols-rounded text-lg">qr_code_2</span>}
                   Tạo mã nạp tiền
                 </button>

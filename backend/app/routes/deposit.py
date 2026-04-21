@@ -87,8 +87,8 @@ async def request_deposit(request: Request):
     body = await request.json()
     amount = body.get("amount", 0)
 
-    if amount < 10000:
-        raise HTTPException(400, detail="Số tiền tối thiểu 10,000 VND")
+    if amount < 2000:
+        raise HTTPException(400, detail="Số tiền tối thiểu 2,000 VND")
     if amount > 50_000_000:
         raise HTTPException(400, detail="Số tiền tối đa 50,000,000 VND")
 
@@ -128,7 +128,7 @@ async def request_deposit(request: Request):
         "bank_name": settings.MBBANK_NAME,
         "bank_account": settings.MBBANK_ACCOUNT,
         "transfer_content": transfer_content,
-        "expires_at": expires_at.isoformat(),
+        "expires_at": expires_at.isoformat() + "Z",
         "message": f"Chuyển khoản đúng số tiền và nội dung trong vòng {DEPOSIT_EXPIRY_MINUTES} phút",
     }
 
