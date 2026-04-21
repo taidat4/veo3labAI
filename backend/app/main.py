@@ -116,24 +116,31 @@ async def _auto_migrate():
         except Exception:
             pass
 
-        # Seed 4 default plans if empty
+        # Seed 6 plans (5 subscription + 1 credit pack)
         try:
             count = (await conn.execute(__import__("sqlalchemy").text(
                 "SELECT COUNT(*) FROM subscription_plans"
             ))).scalar()
-            if count == 0:
+            if count == 0 or count == 4:
+                # Clear old plans if exactly 4 (old seed)
+                if count == 4:
+                    await conn.execute(__import__("sqlalchemy").text(
+                        "DELETE FROM subscription_plans"
+                    ))
                 plans = [
-                    ("Free", "Dùng thử miễn phí", 5, 0, 0, 2, '["5 credits miễn phí","2 video đồng thời","720p"]', 1),
-                    ("Basic", "Gói cơ bản cho cá nhân", 50, 99000, 30, 4, '["50 credits/tháng","4 video đồng thời","1080p","Hỗ trợ email"]', 2),
-                    ("Pro", "Gói chuyên nghiệp", 200, 299000, 30, 8, '["200 credits/tháng","8 video đồng thời","1080p + 4K upscale","Hỗ trợ ưu tiên","API access"]', 3),
-                    ("Enterprise", "Gói doanh nghiệp", 1000, 999000, 30, 20, '["1000 credits/tháng","20 video đồng thời","4K upscale","Hỗ trợ 24/7","API không giới hạn","Tài khoản team"]', 4),
+                    ("Dùng thử", "Trải nghiệm miễn phí", 10, 0, 7, 2, '["10 credits","2 video đồng thời","720p"]', 1),
+                    ("Cơ bản", "Gói cơ bản cho cá nhân", 100, 50000, 30, 4, '["100 credits/tháng","4 video đồng thời","1080p"]', 2),
+                    ("Tiêu chuẩn", "Gói phổ biến nhất", 500, 200000, 30, 6, '["500 credits/tháng","6 video đồng thời","1080p + Upscale"]', 3),
+                    ("Cao cấp", "Gói chuyên nghiệp", 2000, 500000, 30, 10, '["2000 credits/tháng","10 video đồng thời","4K Upscale","Hỗ trợ ưu tiên"]', 4),
+                    ("Doanh nghiệp", "Không giới hạn sáng tạo", 10000, 1500000, 30, 20, '["10000 credits/tháng","20 video đồng thời","4K Upscale","API access","Hỗ trợ 24/7"]', 5),
+                    ("Mua Credit", "10.000đ = 1.000 credits", 1000, 10000, 0, 0, '["Mua thêm credit","Không thời hạn","Dùng ngay"]', 6),
                 ]
                 for name, desc, credits, price, days, conc, features, sort in plans:
                     await conn.execute(__import__("sqlalchemy").text(
                         "INSERT INTO subscription_plans (name, description, credits, price, duration_days, max_concurrent, features, is_active, sort_order) "
                         "VALUES (:n, :d, :c, :p, :dd, :mc, :f, 1, :s)"
                     ), {"n": name, "d": desc, "c": credits, "p": price, "dd": days, "mc": conc, "f": features, "s": sort})
-                logger.info("[SEED] 4 default subscription plans created")
+                logger.info("[SEED] 6 subscription plans created (5 tiers + 1 credit pack)")
         except Exception as e:
             logger.warning(f"[SEED] Plans seed skipped: {e}")
 
