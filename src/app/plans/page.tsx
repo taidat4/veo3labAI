@@ -3,7 +3,7 @@
  */
 "use client";
 import { useEffect, useState, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import { Navbar } from "@/components/Navbar";
@@ -26,14 +26,12 @@ const PRESET_AMOUNTS = [
 
 export default function PlansPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const user = useStore((s) => s.user);
   const setUser = useStore((s) => s.setUser);
   const showToast = useStore((s) => s.showToast);
 
-  // Tab state
-  const initialTab = searchParams.get("tab") === "deposit" ? "deposit" : "plans";
-  const [activeTab, setActiveTab] = useState<"plans" | "deposit">(initialTab);
+  // Tab state — read from URL ?tab=deposit
+  const [activeTab, setActiveTab] = useState<"plans" | "deposit">("plans");
 
   // Plans state
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -56,6 +54,10 @@ export default function PlansPage() {
     if (stored && token) {
       try { setUser({ ...JSON.parse(stored), token }); } catch { router.push("/login"); }
     } else { router.push("/login"); }
+    // Read tab from URL
+    if (typeof window !== "undefined" && window.location.search.includes("tab=deposit")) {
+      setActiveTab("deposit");
+    }
   }, [setUser, router]);
 
   // Fetch plans
