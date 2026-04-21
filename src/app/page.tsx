@@ -36,6 +36,7 @@ export default function HomePage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const storeMediaTab = useStore((s) => s.mediaTab); // "video" | "image" from sidebar
   const [contentFilter, setContentFilter] = useState<"all" | "video" | "image">(storeMediaTab);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
 
   const toggleSelect = (id: number) => {
     setSelectedIds(prev => {
@@ -84,6 +85,7 @@ export default function HomePage() {
       const data = await api.getJobs(120);
       const jobs = data.jobs || [];
       setHistory(jobs);
+      setIsLoadingHistory(false);
 
       // Restore active jobs from API (survive page reload)
       // Only restore jobs from the last 15 minutes
@@ -104,7 +106,9 @@ export default function HomePage() {
           }
         }
       }
-    } catch { }
+    } catch {
+      setIsLoadingHistory(false);
+    }
   }, [setHistory]);
 
   useEffect(() => {
@@ -427,8 +431,23 @@ export default function HomePage() {
                 </div>
               )}
 
+              {/* Loading skeleton */}
+              {isLoadingHistory && allCompleted.length === 0 && (
+                <div className={`grid ${gridClass} gap-4`}>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="video-card fade-in">
+                      <div className="aspect-video shimmer" />
+                      <div className="p-3">
+                        <div className="h-4 w-3/4 shimmer rounded" />
+                        <div className="h-3 w-1/2 shimmer rounded mt-2" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Empty state — no content at all */}
-              {allCompleted.length === 0 && activeJobList.length === 0 && (
+              {!isLoadingHistory && allCompleted.length === 0 && activeJobList.length === 0 && (
                 <div className="flex flex-col items-center py-16">
                   <span className="material-symbols-rounded text-6xl mb-4" style={{ color: "var(--text-muted)" }}>movie_creation</span>
                   <h2 className="text-xl font-bold mb-2" style={{ color: "var(--text-secondary)" }}>
