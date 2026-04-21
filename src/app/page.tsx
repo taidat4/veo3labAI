@@ -79,13 +79,32 @@ export default function HomePage() {
 
   const setOnRefreshHistory = useStore((s) => s.setOnRefreshHistory);
 
-  // ── Fetch history ──
+  // ── Load cached history instantly from localStorage ──
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("veo3_history_cache");
+      if (cached) {
+        const jobs = JSON.parse(cached);
+        if (Array.isArray(jobs) && jobs.length > 0) {
+          setHistory(jobs);
+          setIsLoadingHistory(false);
+        }
+      }
+    } catch { }
+  }, [setHistory]);
+
+  // ── Fetch history from API (refresh in background) ──
   const fetchHistory = useCallback(async () => {
     try {
       const data = await api.getJobs(120);
       const jobs = data.jobs || [];
       setHistory(jobs);
       setIsLoadingHistory(false);
+
+      // ★ Cache to localStorage for instant next load
+      try {
+        localStorage.setItem("veo3_history_cache", JSON.stringify(jobs));
+      } catch { }
 
       // Restore active jobs from API (survive page reload)
       // Only restore jobs from the last 15 minutes
