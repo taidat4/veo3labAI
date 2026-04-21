@@ -1142,3 +1142,48 @@ async def update_user_role(
     )
     await db.commit()
     return {"success": True, "role": new_role}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CREDIT SETTINGS (lưu vào DB, không phải localStorage)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/credit-settings")
+async def get_credit_settings(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Lấy cài đặt credit cost"""
+    require_admin(request)
+    video_r = await db.execute(select(SystemSetting).where(SystemSetting.key == "credit_cost_video"))
+    image_r = await db.execute(select(SystemSetting).where(SystemSetting.key == "credit_cost_image"))
+    video_s = video_r.scalar_one_or_none()
+    image_s = image_r.scalar_one_or_none()
+    return {
+        "videoCost": int(video_s.value) if video_s else 1,
+        "imageCost": int(image_s.value) if image_s else 1,
+    }
+
+
+@router.put("/credit-settings")
+async def update_credit_settings(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Cập nhật credit cost — lưu vào DB"""
+    require_admin(request)
+    body = await request.json()
+    video_cost = int(body.get("videoCost", 1))
+    image_cost = int(body.get("imageCost", 1))
+
+    for key, val in [("credit_cost_video", video_cost), ("credit_cost_image", image_cost)]:
+        result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
+        setting = result.scalar_one_or_none()
+        if setting:
+            setting.value = str(val)
+        else:
+            db.add(SystemSetting(key=key, value=str(val)))
+
+    await db.commit()
+    logger.info(f"💰 Credit settings updated: video={video_cost}, image={image_cost}")
+    return {"success": True, "videoCost": video_cost, "imageCost": image_cost}

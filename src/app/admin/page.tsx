@@ -281,6 +281,7 @@ export default function AdminPage() {
   const [editForm, setEditForm] = useState({ password: "", totp_secret: "", proxy_url: "", flow_project_url: "" });
   const [editLoading, setEditLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const [userCount, setUserCount] = useState(0);
 
   // Check if admin was previously authed in this session
   useEffect(() => {
@@ -317,7 +318,10 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    if (authed) { fetchStats(); }
+    if (authed) {
+      fetchStats();
+      adminApi.getUsers(1).then(d => setUserCount(d.total || d.users?.length || 0)).catch(() => {});
+    }
   }, [authed, fetchStats]);
 
   // Auto-refresh every 30s
@@ -326,6 +330,17 @@ export default function AdminPage() {
     const interval = setInterval(fetchStats, 30000);
     return () => clearInterval(interval);
   }, [authed, fetchStats]);
+
+  // Load credit settings from DB when switching to credits tab
+  useEffect(() => {
+    if (activeTab === "credits" && authed) {
+      const token = sessionStorage.getItem("admin_token");
+      fetch("/api/admin/credit-settings", { headers: { "X-Admin-Key": token || "" } })
+        .then(r => r.json())
+        .then(d => setCreditSettings({ videoCost: d.videoCost || 1, imageCost: d.imageCost || 1 }))
+        .catch(() => {});
+    }
+  }, [activeTab, authed]);
 
   const totalVideos = stats?.accounts?.reduce((sum, a) => sum + a.usage_count, 0) ?? 0;
 
@@ -483,7 +498,7 @@ export default function AdminPage() {
           <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", padding: "0 12px", marginBottom: 20, color: "var(--text-muted)" }}>Quản lý</p>
           {([
             { key: "accounts" as const, label: "Accounts", icon: "group", badge: stats?.total_accounts },
-            { key: "users" as const, label: "Người dùng", icon: "person", badge: 0 },
+            { key: "users" as const, label: "Người dùng", icon: "person", badge: userCount },
             { key: "plans" as const, label: "Gói đăng ký", icon: "card_membership", badge: null },
             { key: "credits" as const, label: "Cài đặt Credit", icon: "toll", badge: null },
           ] as const).map(item => (
@@ -861,13 +876,22 @@ export default function AdminPage() {
               {/* Save button */}
               <div className="flex justify-end mt-6">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     setCreditSaving(true);
-                    localStorage.setItem('veo3_credit_settings', JSON.stringify(creditSettings));
-                    setTimeout(() => {
-                      setCreditSaving(false);
+                    try {
+                      const token = sessionStorage.getItem("admin_token");
+                      const res = await fetch("/api/admin/credit-settings", {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json", "X-Admin-Key": token || "" },
+                        body: JSON.stringify(creditSettings),
+                      });
+                      if (!res.ok) throw new Error("Failed");
                       showToast('✅ Đã lưu cài đặt credit!', 'success');
-                    }, 500);
+                    } catch {
+                      showToast('❌ Lưu thất bại!', 'error');
+                    } finally {
+                      setCreditSaving(false);
+                    }
                   }}
                   disabled={creditSaving}
                   className="btn-generate !py-2.5 !px-6 flex items-center gap-2 text-sm"

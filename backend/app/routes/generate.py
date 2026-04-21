@@ -69,10 +69,15 @@ async def _create_jobs(
     redis,
 ) -> GenerateResponse:
     """Internal: Create jobs from prompt list, handle pricing + queue"""
+    from app.models import SystemSetting
     rate_limiter = RateLimiter(redis)
 
-    # ── Tính giá ──
-    base_price = MODEL_PRICING.get(model_key, 5000)
+    # ── Tính giá — đọc từ SystemSetting (admin cài đặt) ──
+    is_image = is_image_model(model_key)
+    cost_key = "credit_cost_image" if is_image else "credit_cost_video"
+    cost_result = await db.execute(select(SystemSetting).where(SystemSetting.key == cost_key))
+    cost_setting = cost_result.scalar_one_or_none()
+    base_price = int(cost_setting.value) if cost_setting else 1  # Mặc định = 1 credit
     total_videos = len(prompts) * number_of_outputs
     total_cost = base_price * total_videos
 
