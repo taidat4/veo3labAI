@@ -141,6 +141,7 @@ class NanoAIClient:
         aspect_ratio: str = "IMAGE_ASPECT_RATIO_LANDSCAPE",
         image_model: str = "GEM_PIX_2",
         image_urls: list = None,
+        cookie: str = "",
     ) -> dict:
         """
         Tạo ảnh qua NanoAI v2 API.
@@ -153,8 +154,10 @@ class NanoAIClient:
             "aspectRatio": aspect_ratio,
             "imageModel": image_model,
         }
+        if cookie:
+            payload["cookie"] = cookie
 
-        logger.info(f"🖼️ NanoAI create-image: model={image_model}, ar={aspect_ratio}")
+        logger.info(f"🖼️ NanoAI create-image: model={image_model}, ar={aspect_ratio}, hasCookie={bool(cookie)}")
 
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(

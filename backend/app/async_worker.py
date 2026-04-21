@@ -1397,6 +1397,7 @@ async def _process_image_via_nanoai(
                 prompt=prompt,
                 aspect_ratio=aspect_ratio,
                 image_model=image_model,
+                cookie=account.get("cookies", ""),
             )
 
             if result.get("error") and not result.get("success"):
