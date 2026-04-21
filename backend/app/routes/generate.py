@@ -89,11 +89,12 @@ async def _create_jobs(
     total_videos = len(prompts) * number_of_outputs
     total_cost = base_price * total_videos
 
-    # Check số dư
-    if user.balance < total_cost:
+    # Check credits
+    user_credits = user.credits or 0
+    if user_credits < total_cost:
         raise HTTPException(
             status_code=400,
-            detail=f"Không đủ credit. Cần {total_cost:,}đ, hiện có {user.balance:,}đ",
+            detail=f"Không đủ credit. Cần {total_cost} credits, hiện có {user_credits} credits",
         )
 
     # ── Check rate limit — max 8 active per user ──
@@ -101,18 +102,18 @@ async def _create_jobs(
     max_active = 8
     available_slots = max(0, max_active - user_usage)
 
-    # ── Trừ tiền ──
-    prev_balance = user.balance
-    new_balance = prev_balance - total_cost
-    user.balance = new_balance
+    # ── Trừ credits ──
+    prev_credits = user_credits
+    new_credits = prev_credits - total_cost
+    user.credits = new_credits
 
     # Ghi lịch sử
     history = BalanceHistory(
         user_id=user_id,
-        previous_amount=prev_balance,
+        previous_amount=prev_credits,
         changed_amount=-total_cost,
-        current_amount=new_balance,
-        content=f"Tạo {total_videos} {'ảnh' if is_image_model(model_key) else 'video'} — {prompts[0][:40]}...",
+        current_amount=new_credits,
+        content=f"Tạo {total_videos} {'ảnh' if is_image_model(model_key) else 'video'} (-{total_cost} credits)",
         type="generation",
     )
     db.add(history)
@@ -206,7 +207,7 @@ async def _create_jobs(
     all_ids = [j.id for j in jobs_created]
     logger.info(
         f"📥 {len(jobs_created)} jobs ({media_type}) created: batch={batch_id}"
-        f" user_id={user_id} cost={total_cost}đ active={active_count} waiting={queued_count}"
+        f" user_id={user_id} cost={total_cost}cr active={active_count} waiting={queued_count}"
     )
 
     return GenerateResponse(
@@ -216,7 +217,7 @@ async def _create_jobs(
         batch_id=batch_id,
         status="queued",
         cost=total_cost,
-        remaining_balance=new_balance,
+        remaining_balance=new_credits,
         queued_count=queued_count,
         message=f"Đang xử lý {len(jobs_created)} {'ảnh' if media_type == 'image' else 'video'}..."
                 + (f" ({queued_count} trong hàng chờ)" if queued_count > 0 else ""),

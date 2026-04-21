@@ -102,7 +102,7 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
       if (res.success) {
         const allIds: number[] = res.job_ids || [res.job_id];
         showToast(`🎬 Đang tạo ${allIds.length} ${isVideo ? "video" : "ảnh"}...`, "success");
-        setUser({ ...user, balance: res.remaining_balance });
+        setUser({ ...user, credits: res.remaining_balance });
         allIds.forEach((jid: number) => {
           addActiveJob({
             id: jid,
@@ -149,7 +149,7 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
 
       if (res.success) {
         showToast(`🎬 Đang tạo ${res.job_ids?.length || prompts.length} ${isVideo ? "video" : "ảnh"}!`, "success");
-        setUser({ ...user, balance: res.remaining_balance });
+        setUser({ ...user, credits: res.remaining_balance });
         (res.job_ids || []).forEach((id: number, idx: number) => {
           addActiveJob({
             id,
