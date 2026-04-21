@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { label: "Video của tôi", href: "/videos", icon: "video_library" },
   { label: "Ảnh của tôi", href: "/images", icon: "photo_library" },
   { label: "Hàng chờ", href: "/queue", icon: "schedule" },
+  { label: "Nạp tiền", href: "/deposit", icon: "account_balance_wallet", accent: true },
 ];
 
 export function Navbar() {
@@ -43,17 +44,23 @@ export function Navbar() {
       <div className="flex items-center gap-1">
         {NAV_ITEMS.map((item) => {
           const isActive = pathname === item.href;
+          const isAccent = (item as any).accent;
           return (
             <button
               key={item.href}
               onClick={() => router.push(item.href)}
               className={`neon-underline flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${isActive ? 'active' : ''}`}
               style={{
-                color: isActive ? "var(--neon-blue)" : "var(--text-secondary)",
-                background: isActive ? "rgba(99, 102, 241, 0.08)" : "transparent",
+                color: isActive
+                  ? (isAccent ? "#10b981" : "var(--neon-blue)")
+                  : (isAccent ? "#10b981" : "var(--text-secondary)"),
+                background: isActive
+                  ? (isAccent ? "rgba(16,185,129,0.1)" : "rgba(99, 102, 241, 0.08)")
+                  : "transparent",
+                fontWeight: isAccent ? 600 : undefined,
               }}
-              onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.color = "var(--text-primary)"; }}
-              onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = "var(--text-secondary)"; }}
+              onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.color = isAccent ? "#34d399" : "var(--text-primary)"; }}
+              onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = isAccent ? "#10b981" : "var(--text-secondary)"; }}
             >
               <span className="material-symbols-rounded text-lg">{item.icon}</span>
               <span className="hidden sm:inline">{item.label}</span>
