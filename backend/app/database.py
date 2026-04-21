@@ -187,3 +187,17 @@ async def init_db():
     """Tạo tất cả bảng (dùng cho dev)"""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Auto-migrate: add 'credits' column if missing
+    async with engine.begin() as conn:
+        try:
+            if is_sqlite:
+                await conn.execute(__import__("sqlalchemy").text(
+                    "ALTER TABLE users ADD COLUMN credits INTEGER DEFAULT 0"
+                ))
+            else:
+                await conn.execute(__import__("sqlalchemy").text(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS credits INTEGER DEFAULT 0"
+                ))
+        except Exception:
+            pass  # Column already exists

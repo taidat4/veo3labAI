@@ -87,6 +87,13 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
     if (!prompt.trim()) return showToast("Vui lòng nhập mô tả", "error");
     if (!user) return;
 
+    // Pre-check credits
+    const neededCredits = creditPerItem * numberOfOutputs;
+    if ((user.credits ?? 0) < neededCredits) {
+      setShowCreditModal(true);
+      return;
+    }
+
     const finalPrompt = selectedStyle ? `[${selectedStyle} style] ${prompt.trim()}` : prompt.trim();
     setGenerating(true);
 
