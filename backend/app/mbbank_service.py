@@ -20,23 +20,26 @@ class MBBankService:
         self.api_url = settings.MBBANK_API_URL
 
     async def get_transactions(self, limit: int = 20) -> Optional[List[Dict]]:
-        """Lấy danh sách giao dịch gần đây từ MBBank — gửi full config"""
+        """Lấy danh sách giao dịch gần đây từ MBBank"""
         try:
+            # Only send essential params (matching working MY-BOT config)
             params = {
                 "key": settings.MBBANK_API_KEY,
                 "username": settings.MBBANK_USERNAME,
                 "password": settings.MBBANK_PASSWORD,
                 "accountNo": settings.MBBANK_ACCOUNT,
-                "user": settings.MBBANK_USERNAME,
-                "sessionId": settings.MBBANK_SESSION_ID,
-                "id_run": settings.MBBANK_ID_RUN,
-                "token": settings.MBBANK_TOKEN,
-                "cookie": settings.MBBANK_COOKIE,
-                "deviceid": settings.MBBANK_DEVICE_ID,
             }
 
-            # Remove empty params
-            params = {k: v for k, v in params.items() if v}
+            # Add optional params only if set
+            for extra_key, extra_val in [
+                ("sessionId", settings.MBBANK_SESSION_ID),
+                ("id_run", settings.MBBANK_ID_RUN),
+                ("token", settings.MBBANK_TOKEN),
+                ("cookie", settings.MBBANK_COOKIE),
+                ("deviceid", settings.MBBANK_DEVICE_ID),
+            ]:
+                if extra_val:
+                    params[extra_key] = extra_val
 
             async with httpx.AsyncClient(timeout=30) as client:
                 response = await client.get(self.api_url, params=params)
@@ -44,7 +47,19 @@ class MBBankService:
             if response.status_code == 200:
                 data = response.json()
 
-                if data.get("status") == "success" and "transactions" in data:
+                # DEBUG: Log raw response structure
+                status = data.get("status")
+                all_txns = data.get("transactions", [])
+                logger.info(f"📦 MBBank raw: status={status}, total_txns={len(all_txns)}")
+                if all_txns:
+                    in_count = len([t for t in all_txns if t.get("type") == "IN"])
+                    out_count = len([t for t in all_txns if t.get("type") != "IN"])
+                    logger.info(f"📦 MBBank: IN={in_count}, OUT={out_count}")
+                    # Log first 3 transactions for debug
+                    for i, t in enumerate(all_txns[:3]):
+                        logger.info(f"📦 TX[{i}]: type={t.get('type')} amount={t.get('amount')} desc={t.get('description','')[:80]}")
+
+                if status == "success" and "transactions" in data:
                     transactions = data["transactions"]
                     in_transactions = [t for t in transactions if t.get("type") == "IN"]
 
@@ -58,14 +73,16 @@ class MBBankService:
                             "type": "IN",
                         })
 
-                    logger.info(f"✅ Lấy được {len(formatted)} giao dịch từ MBBank")
+                    logger.info(f"✅ Lấy được {len(formatted)} giao dịch IN từ MBBank")
                     return formatted
                 else:
                     error_msg = data.get("message", "Unknown error")
-                    logger.warning(f"⚠️ API MBBank trả về lỗi: {error_msg}")
+                    logger.warning(f"⚠️ API MBBank trả về: status={status}, message={error_msg}")
+                    logger.warning(f"⚠️ Full response keys: {list(data.keys())}")
                     return None
             else:
                 logger.error(f"❌ Lỗi HTTP {response.status_code} từ API MBBank")
+                logger.error(f"❌ Response body: {response.text[:200]}")
                 return None
 
         except Exception as e:
