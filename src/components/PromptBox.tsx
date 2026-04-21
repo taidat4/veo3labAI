@@ -4,6 +4,7 @@
  */
 "use client";
 import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 
@@ -43,8 +44,10 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [showCreditModal, setShowCreditModal] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   const user = useStore((s) => s.user);
   const aspectRatio = useStore((s) => s.aspectRatio);
@@ -99,7 +102,12 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
         onRefreshHistory();
       }
     } catch (e: any) {
-      showToast(e.message || "Lỗi tạo", "error");
+      const msg = e.message || "Lỗi tạo";
+      if (msg.includes("balance") || msg.includes("credit") || msg.includes("Insufficient") || msg.includes("không đủ")) {
+        setShowCreditModal(true);
+      } else {
+        showToast(msg, "error");
+      }
     } finally {
       setGenerating(false);
     }
@@ -142,7 +150,12 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
         onRefreshHistory();
       }
     } catch (e: any) {
-      showToast(e.message || "Lỗi bulk generate", "error");
+      const msg = e.message || "Lỗi bulk generate";
+      if (msg.includes("balance") || msg.includes("credit") || msg.includes("Insufficient") || msg.includes("không đủ")) {
+        setShowCreditModal(true);
+      } else {
+        showToast(msg, "error");
+      }
     } finally {
       setBulkSubmitting(false);
     }
@@ -371,6 +384,46 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
           </div>
         </div>
       )}
+
+      {/* ═══ INSUFFICIENT CREDIT MODAL ═══ */}
+      {showCreditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowCreditModal(false); }}>
+          <div className="glass-card p-8 w-full max-w-md mx-4 text-center"
+            style={{ border: "1px solid var(--border-accent)", boxShadow: "0 0 40px rgba(239,68,68,0.15)" }}>
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4"
+              style={{ background: "rgba(239,68,68,0.1)", border: "3px solid #ef4444" }}>
+              <span className="material-symbols-rounded text-3xl" style={{ color: "#ef4444" }}>credit_card_off</span>
+            </div>
+            <h2 className="text-xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>Hết Credit!</h2>
+            <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
+              Bạn không đủ credit để tạo. Hãy mua gói đăng ký hoặc nạp thêm tiền.
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button onClick={() => { setShowCreditModal(false); router.push("/plans"); }}
+                className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white"
+                style={{ background: "linear-gradient(135deg, var(--neon-blue), var(--neon-purple))" }}>
+                <span className="flex items-center gap-1.5">
+                  <span className="material-symbols-rounded text-base">workspace_premium</span>
+                  Mua gói
+                </span>
+              </button>
+              <button onClick={() => { setShowCreditModal(false); router.push("/plans?tab=deposit"); }}
+                className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white"
+                style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}>
+                <span className="flex items-center gap-1.5">
+                  <span className="material-symbols-rounded text-base">account_balance_wallet</span>
+                  Nạp tiền
+                </span>
+              </button>
+            </div>
+            <button onClick={() => setShowCreditModal(false)} className="mt-4 text-xs underline"
+              style={{ color: "var(--text-muted)" }}>Đóng</button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
+

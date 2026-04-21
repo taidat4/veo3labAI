@@ -11,7 +11,7 @@ const NAV_ITEMS = [
   { label: "Video của tôi", href: "/videos", icon: "video_library" },
   { label: "Ảnh của tôi", href: "/images", icon: "photo_library" },
   { label: "Hàng chờ", href: "/queue", icon: "schedule" },
-  { label: "Nạp tiền", href: "/deposit", icon: "account_balance_wallet", accent: true },
+  { label: "Gói Đăng Ký", href: "/plans", icon: "workspace_premium", accent: true },
 ];
 
 export function Navbar() {
