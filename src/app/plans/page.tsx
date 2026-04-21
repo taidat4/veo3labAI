@@ -117,14 +117,35 @@ export default function PlansPage() {
     finally { setDepositLoading(false); }
   };
 
-  const handleBuyPlan = (plan: Plan) => {
+  const [buyingPlanId, setBuyingPlanId] = useState<number | null>(null);
+
+  const handleBuyPlan = async (plan: Plan) => {
     if (!user) return;
-    if ((user.balance ?? 0) < plan.price) {
+    if (plan.price > 0 && (user.balance ?? 0) < plan.price) {
       showToast("❌ Số dư không đủ! Chuyển sang tab Nạp tiền.", "error");
       setActiveTab("deposit");
       return;
     }
-    showToast(`⏳ Chức năng mua gói "${plan.name}" sẽ sớm ra mắt!`, "info");
+    setBuyingPlanId(plan.id);
+    try {
+      const res = await api.purchasePlan(plan.id);
+      if (res.success) {
+        showToast(`🎉 ${res.message}`, "success");
+        // Update user balance
+        const stored = localStorage.getItem("veo3_user");
+        const token = localStorage.getItem("veo3_token");
+        if (stored && token) {
+          const u = JSON.parse(stored);
+          u.balance = res.new_balance;
+          localStorage.setItem("veo3_user", JSON.stringify(u));
+          setUser({ ...u, token });
+        }
+      }
+    } catch (e: any) {
+      showToast(e.message || "Lỗi mua gói", "error");
+    } finally {
+      setBuyingPlanId(null);
+    }
   };
 
   const subscriptionPlans = plans.filter((p) => p.duration_days > 0);

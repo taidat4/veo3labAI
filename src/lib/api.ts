@@ -145,6 +145,8 @@ export const api = {
 
   // ── Plans / Pricing ──
   getPlans: () => request("/api/plans"),
+  purchasePlan: (plan_id: number) =>
+    request("/api/purchase-plan", { method: "POST", body: { plan_id } }),
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
