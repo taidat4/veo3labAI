@@ -76,11 +76,24 @@ export default function DepositPage() {
     return () => clearInterval(interval);
   }, [state, depositInfo, showToast]);
 
-  // Auto-poll verify
+  // Auto-poll verify — CHỈ khi user đã bấm "Đã chuyển khoản"
+  // ⚠️ Poll mỗi 15s, max 20 lần (5 phút) để tránh khóa MBBank
+  const MAX_CHECK_ATTEMPTS = 20;
   useEffect(() => {
     if (state !== "checking" || !depositInfo?.token) return;
 
     pollRef.current = setInterval(async () => {
+      setCheckCount(prev => {
+        if (prev >= MAX_CHECK_ATTEMPTS) {
+          // Đã check quá nhiều lần — dừng lại
+          if (pollRef.current) clearInterval(pollRef.current);
+          showToast("⏰ Đã kiểm tra tối đa 20 lần. Vui lòng bấm 'Đã chuyển khoản' lại nếu chưa nhận được.", "error");
+          setState("qr"); // Quay lại hiện QR
+          return 0;
+        }
+        return prev + 1;
+      });
+
       try {
         const token = localStorage.getItem("veo3_token");
         const res = await fetch(`/api/deposit/verify/${depositInfo.token}`, {
@@ -88,7 +101,6 @@ export default function DepositPage() {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
-        setCheckCount(prev => prev + 1);
 
         if (data.status === "completed") {
           setState("success");
@@ -106,7 +118,7 @@ export default function DepositPage() {
           if (pollRef.current) clearInterval(pollRef.current);
         }
       } catch {}
-    }, 5000);
+    }, 15000); // 15 giây — an toàn cho MBBank
 
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [state, depositInfo, showToast, setUser]);

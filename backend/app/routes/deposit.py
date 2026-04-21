@@ -1,9 +1,15 @@
 """
 Deposit Routes — MBBank auto-payment for Veo3Lab
 User tạo yêu cầu nạp → QR code → chuyển khoản → auto cộng credits
+
+⚠️ QUAN TRỌNG: MBBank API rất dễ bị khóa nếu query liên tục!
+- Chỉ query khi có pending deposit (user đã bấm "Đã chuyển khoản")
+- Cooldown 30s giữa các lần query cùng token
+- Frontend poll mỗi 15s, max 20 lần
 """
 import secrets
 import logging
+import time
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Request
@@ -21,6 +27,11 @@ settings = get_settings()
 
 DEPOSIT_EXPIRY_MINUTES = 15
 CREDIT_RATE = 1000  # 1000 VND = 1 credit (admin có thể chỉnh)
+
+# ── Cooldown cache: chống spam MBBank API ──
+# { token: last_query_timestamp }
+_mbbank_cooldown: dict[str, float] = {}
+MBBANK_COOLDOWN_SECONDS = 30  # Tối thiểu 30s giữa mỗi lần query MBBank
 
 
 # ── Models ──
@@ -124,7 +135,10 @@ async def request_deposit(request: Request):
 
 @router.post("/verify/{token}")
 async def verify_deposit(token: str, request: Request):
-    """Kiểm tra giao dịch MBBank có khớp không → cộng credits"""
+    """
+    Kiểm tra giao dịch MBBank có khớp không → cộng credits.
+    ⚠️ Có cooldown 30s — không query MBBank liên tục!
+    """
     user = get_current_user(request)
 
     async with async_session_factory() as session:
@@ -149,7 +163,21 @@ async def verify_deposit(token: str, request: Request):
             await session.commit()
             return {"success": False, "status": "expired", "message": "Mã nạp tiền đã hết hạn"}
 
-        # Check MBBank
+        # ── Cooldown check: chống spam MBBank ──
+        now = time.time()
+        last_query = _mbbank_cooldown.get(token, 0)
+        if now - last_query < MBBANK_COOLDOWN_SECONDS:
+            remaining = int(MBBANK_COOLDOWN_SECONDS - (now - last_query))
+            logger.debug(f"⏳ Cooldown active for token {token}, {remaining}s remaining")
+            return {
+                "success": False,
+                "status": "pending",
+                "message": f"Đang chờ thanh toán... (kiểm tra lại sau {remaining}s)",
+                "cooldown": remaining,
+            }
+
+        # ── Query MBBank (rate-limited) ──
+        _mbbank_cooldown[token] = now  # Mark query time BEFORE calling
         try:
             mbbank = get_mbbank_service()
             matched_tx = await mbbank.check_deposit(pending.content, pending.amount)
@@ -190,6 +218,9 @@ async def verify_deposit(token: str, request: Request):
                     db_user.balance += pending.credits
 
                 await session.commit()
+
+                # Cleanup cooldown cache
+                _mbbank_cooldown.pop(token, None)
 
                 logger.info(f"💰 Deposit completed: user={pending.user_id}, +{pending.credits} credits ({pending.amount} VND)")
 
