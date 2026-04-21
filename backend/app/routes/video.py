@@ -1620,11 +1620,14 @@ async def upscale_image(
             if task_id:
                 logger.info(f"⏳ Image upscale async taskId: {task_id}")
                 # ★ Save task_id and return IMMEDIATELY — poll in background
+                # ★ MUST copy dict to force SQLAlchemy JSON mutation detection
+                params = dict(params)
                 params["upscale_task_id"] = task_id
                 params["upscale_status"] = "processing"
                 params["upscale_resolution"] = target_resolution
                 job.params = params
                 await db.commit()
+                logger.info(f"💾 Saved upscale_task_id={task_id} to job {job_id} params")
 
                 # ★ Start background poll as asyncio task (NOT thread — DB sessions need same loop)
                 import asyncio
