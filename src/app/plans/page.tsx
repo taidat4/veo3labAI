@@ -36,6 +36,7 @@ export default function PlansPage() {
   // Plans state
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
+  const [trialUsed, setTrialUsed] = useState(false);
 
   // Deposit state
   const [depositState, setDepositState] = useState<"select" | "qr" | "checking" | "success">("select");
@@ -70,7 +71,7 @@ export default function PlansPage() {
   // Fetch plans
   useEffect(() => {
     (async () => {
-      try { const d = await api.getPlans(); setPlans(d.plans || []); } catch { }
+      try { const d = await api.getPlans(); setPlans(d.plans || []); setTrialUsed(!!d.trial_used); } catch { }
       setLoadingPlans(false);
     })();
   }, []);
@@ -169,7 +170,7 @@ export default function PlansPage() {
     }
   };
 
-  const subscriptionPlans = plans.filter((p) => p.duration_days > 0).sort((a, b) => a.price - b.price);
+  const subscriptionPlans = plans.filter((p) => p.duration_days > 0).filter(p => !(trialUsed && p.price === 0)).sort((a, b) => a.price - b.price);
   const creditPacks = plans.filter((p) => p.duration_days === 0 && p.price > 0);
   const activeAmount = customAmount ? parseInt(customAmount) || 0 : selectedAmount;
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;

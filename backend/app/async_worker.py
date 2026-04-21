@@ -340,6 +340,7 @@ async def cleanup_stuck_jobs(max_age_minutes: int = 10):
     """
     Fail jobs stuck in processing/pending/queued for more than max_age_minutes.
     Called on server startup to clean up leftovers from previous sessions.
+    Also refunds credits for stuck jobs.
     """
     from datetime import timedelta
     cutoff = datetime.utcnow() - timedelta(minutes=max_age_minutes)
@@ -347,7 +348,7 @@ async def cleanup_stuck_jobs(max_age_minutes: int = 10):
     async with async_session_factory() as session:
         result = await session.execute(
             select(GenerationJob).where(
-                GenerationJob.status.in_(["processing", "pending", "queued"]),
+                GenerationJob.status.in_(["processing", "pending", "queued", "waiting"]),
                 GenerationJob.started_at < cutoff,
             )
         )
@@ -363,8 +364,30 @@ async def cleanup_stuck_jobs(max_age_minutes: int = 10):
             job.finished_at = datetime.utcnow()
             logger.info(f"🧹 Cleaned stuck job #{job.id} (was {job.progress_percent}%)")
 
+            # Refund credits
+            if job.cost and job.cost > 0:
+                try:
+                    user = (await session.execute(
+                        select(User).where(User.id == job.user_id)
+                    )).scalar_one_or_none()
+                    if user:
+                        try:
+                            user.credits = (user.credits or 0) + job.cost
+                        except Exception:
+                            pass
+                        session.add(BalanceHistory(
+                            user_id=job.user_id,
+                            previous_amount=0,
+                            changed_amount=job.cost,
+                            current_amount=0,
+                            content=f"Hoàn {job.cost} credits — server restart #{job.id}",
+                            type="refund",
+                        ))
+                        logger.info(f"💰 Refunded {job.cost} credits for stuck job #{job.id}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Refund error for job #{job.id}: {e}")
+
         await session.commit()
-        logger.info(f"🧹 Cleaned {len(stuck_jobs)} stuck jobs")
 
 
 # ═══════════════════════════════════════════════════════════════

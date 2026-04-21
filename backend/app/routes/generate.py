@@ -589,9 +589,25 @@ async def buy_credits(
 
 
 @router.get("/plans")
-async def list_public_plans(db: AsyncSession = Depends(get_db)):
+async def list_public_plans(request: Request, db: AsyncSession = Depends(get_db)):
     """Public: list active subscription plans for pricing page."""
-    from app.models import SubscriptionPlan
+    from app.models import SubscriptionPlan, BalanceHistory
+
+    # Check if user already used trial (optional auth)
+    trial_used = False
+    try:
+        user_data = get_current_user(request)
+        uid = user_data["user_id"]
+        trial_check = await db.execute(
+            select(func.count(BalanceHistory.id))
+            .where(BalanceHistory.user_id == uid)
+            .where(BalanceHistory.type == "plan_purchase")
+            .where(BalanceHistory.content.like("%Dùng Thử%"))
+        )
+        trial_used = (trial_check.scalar() or 0) > 0
+    except Exception:
+        pass  # Not logged in — show trial
+
     result = await db.execute(
         select(SubscriptionPlan)
         .where(SubscriptionPlan.is_active == True)
@@ -599,6 +615,7 @@ async def list_public_plans(db: AsyncSession = Depends(get_db)):
     )
     plans = result.scalars().all()
     return {
+        "trial_used": trial_used,
         "plans": [
             {
                 "id": p.id,
