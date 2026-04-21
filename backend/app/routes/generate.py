@@ -527,10 +527,11 @@ async def get_credit_rate(db: AsyncSession = Depends(get_db)):
 @router.post("/buy-credits")
 async def buy_credits(
     request: Request,
-    user_id: int = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Buy credits using VND balance."""
+    user_data = get_current_user(request)
+    user_id = user_data["user_id"]
     from app.models import User, BalanceHistory, SystemSetting
 
     body = await request.json()
@@ -618,10 +619,11 @@ async def list_public_plans(db: AsyncSession = Depends(get_db)):
 @router.post("/purchase-plan")
 async def purchase_plan(
     request: Request,
-    user_id: int = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Purchase a subscription plan or credit pack."""
+    user_data = get_current_user(request)
+    user_id = user_data["user_id"]
     from app.models import SubscriptionPlan, User, BalanceHistory
     from datetime import timedelta
 

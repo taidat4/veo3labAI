@@ -99,11 +99,12 @@ export default function PlansPage() {
     return () => clearInterval(iv);
   }, [depositState, depositInfo, showToast]);
 
-  // Deposit auto-poll
+  // Deposit auto-poll — start polling immediately when QR is shown
   useEffect(() => {
-    if (depositState !== "checking" || !depositInfo?.token) return;
+    if ((depositState !== "qr" && depositState !== "checking") || !depositInfo?.token) return;
+    setCheckCount(0);
     pollRef.current = setInterval(async () => {
-      setCheckCount(p => { if (p >= 200) { if (pollRef.current) clearInterval(pollRef.current); showToast("⏰ Timeout", "error"); setDepositState("qr"); return 0; } return p + 1; });
+      setCheckCount(p => { if (p >= 200) { if (pollRef.current) clearInterval(pollRef.current); showToast("⏰ Timeout", "error"); setDepositState("select"); setDepositInfo(null); return 0; } return p + 1; });
       try {
         const token = localStorage.getItem("veo3_token");
         const res = await fetch(`/api/deposit/verify/${depositInfo.token}`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
@@ -393,25 +394,14 @@ export default function PlansPage() {
                     </div>
                   ))}
                 </div>
-                {depositState === "qr" ? (
-                  <div className="flex gap-3">
-                    <button onClick={() => { setDepositState("select"); setDepositInfo(null); }} className="flex-1 btn-ghost py-3 text-sm">← Quay lại</button>
-                    <button onClick={() => { setDepositState("checking"); setCheckCount(0); }}
-                      className="flex-1 py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2"
-                      style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}>
-                      <span className="material-symbols-rounded text-lg">check_circle</span>Đã chuyển khoản
-                    </button>
-                  </div>
-                ) : (
-                  <div className="text-center">
+                <div className="text-center">
                     <div className="flex items-center justify-center gap-3 mb-2">
                       <span className="spinner !w-5 !h-5" style={{ borderColor: "rgba(16,185,129,0.2)", borderTopColor: "#10b981" }} />
                       <span className="text-sm font-medium" style={{ color: "#10b981" }}>Đang kiểm tra... ({checkCount})</span>
                     </div>
                     <button onClick={() => { setDepositState("select"); setDepositInfo(null); if (pollRef.current) clearInterval(pollRef.current); }}
-                      className="mt-3 text-xs underline" style={{ color: "var(--text-muted)" }}>Hủy</button>
+                      className="mt-1 text-xs underline" style={{ color: "var(--text-muted)" }}>Hủy</button>
                   </div>
-                )}
               </div>
             )}
 
