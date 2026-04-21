@@ -1504,31 +1504,55 @@ async def upscale_image(
     if job.status != "completed":
         raise HTTPException(status_code=400, detail="Ảnh chưa hoàn thành")
 
-    # Try to get media_id — fallback to operation_id
-    img_media_id = job.media_id or job.operation_id or ""
+    # Try to get media_id — prefer NanoAI UUID format
+    params = job.params or {}
+    img_media_id = job.media_id or params.get("nanoai_media_id", "") or job.operation_id or ""
     if not img_media_id:
         raise HTTPException(status_code=400, detail="Ảnh thiếu media_id, không thể upscale")
 
+    logger.info(f"🔍 Image upscale request: job={job_id}, media_id={img_media_id[:40]}, account_id={job.account_id}")
+
     # Check cache
-    params = job.params or {}
     cache_key = f"upscale_{target_resolution}_url"
     if params.get(cache_key):
         return {"success": True, "status": "completed", "upscale_url": params[cache_key]}
 
     from app.async_worker import get_account_token, report_account_result
     from app.nanoai_client import get_nanoai_client
+    from app.models import UltraAccount
 
     nano = get_nanoai_client()
     MAX_RETRIES = 3
     tried_emails: list[str] = []
     last_error = ""
 
+    # ★ Priority: use the SAME account that created the image
+    creating_account = None
+    if job.account_id:
+        async with async_session_factory() as session:
+            acc_result = await session.execute(
+                select(UltraAccount).where(UltraAccount.id == job.account_id)
+            )
+            acc = acc_result.scalar_one_or_none()
+            if acc and acc.bearer_token and acc.is_enabled:
+                creating_account = {
+                    "email": acc.email,
+                    "token": acc.bearer_token,
+                    "account_id": acc.id,
+                }
+                logger.info(f"✅ Using creating account: {acc.email}")
+
     for attempt in range(MAX_RETRIES):
-        account = await get_account_token(exclude_emails=tried_emails)
-        if not account:
-            break
+        # First attempt: use creating account; then fallback to others
+        if attempt == 0 and creating_account:
+            account = creating_account
+        else:
+            account = await get_account_token(exclude_emails=tried_emails)
+            if not account:
+                break
         tried_emails.append(account["email"])
 
+        # Get project_id: from job params first, then from account
         project_id = params.get("project_id", "") or await _get_project_id_for_account(account["account_id"])
         if not project_id:
             logger.info(f"⏭️ Account {account['email']} has no project_id — skipping for image upscale")
@@ -1538,7 +1562,7 @@ async def upscale_image(
         cookie = await _get_account_cookie(account["account_id"])
 
         try:
-            logger.info(f"🔍 Image upscale: job={job_id}, media_id={img_media_id[:30]}, project={project_id[:20] if project_id else 'NONE'}, res={target_resolution}, account={account['email']}, hasCookie={bool(cookie)}, attempt={attempt+1}")
+            logger.info(f"🔍 Image upscale: job={job_id}, media_id={img_media_id[:30]}, project={project_id[:20]}, res={target_resolution}, account={account['email']}, hasCookie={bool(cookie)}, attempt={attempt+1}")
 
             upscale_result = await nano.upscale_image(
                 access_token=account["token"],
