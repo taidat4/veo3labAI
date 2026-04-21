@@ -50,6 +50,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     email = Column(String(255), unique=True, nullable=True)
     balance = Column(Integer, default=0)       # Số dư (VNĐ)
+    credits = Column(Integer, default=0)       # Credits (lượt tạo)
     total_deposit = Column(Integer, default=0)  # Tổng nạp
     role = Column(String(20), default="customer")  # customer | admin
     is_banned = Column(Boolean, default=False)

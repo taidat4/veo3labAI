@@ -653,6 +653,7 @@ async def list_users(
                 "email": u.email,
                 "role": u.role,
                 "balance": u.balance,
+                "credits": u.credits or 0,
                 "total_deposit": u.total_deposit,
                 "is_banned": u.is_banned,
                 "api_key": u.api_key,

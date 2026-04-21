@@ -573,6 +573,9 @@ async def purchase_plan(
     if plan.price > 0:
         user.balance -= plan.price
 
+    # Add credits to user
+    user.credits = (user.credits or 0) + plan.credits
+
     if plan.duration_days > 0:
         user.plan_id = plan.id
         user.plan_expires_at = datetime.utcnow() + timedelta(days=plan.duration_days)
@@ -582,18 +585,19 @@ async def purchase_plan(
         previous_amount=prev_balance,
         changed_amount=-plan.price,
         current_amount=user.balance,
-        content=f"Mua gói: {plan.name} ({plan.credits} credits)",
+        content=f"Mua gói: {plan.name} (+{plan.credits} credits)",
         type="plan_purchase",
     ))
 
     await db.commit()
     await db.refresh(user)
-    logger.info(f"[PLAN] User {user_id} purchased '{plan.name}' for {plan.price}đ")
+    logger.info(f"[PLAN] User {user_id} purchased '{plan.name}' for {plan.price}đ, +{plan.credits} credits")
 
     return {
         "success": True,
-        "message": f"Đã mua gói {plan.name} thành công!",
+        "message": f"Đã mua gói {plan.name} thành công! +{plan.credits} credits",
         "new_balance": user.balance,
+        "new_credits": user.credits,
         "plan_name": plan.name,
         "credits": plan.credits,
         "expires_at": user.plan_expires_at.isoformat() if user.plan_expires_at else None,

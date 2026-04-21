@@ -73,10 +73,16 @@ export function Navbar() {
       <div className="ml-auto flex items-center gap-3">
         {user && (
           <>
-            {/* Số Dư */}
-            <div className="badge badge-neon">
-              <span className="material-symbols-rounded text-xs">account_balance_wallet</span>
-              {(user.balance ?? 0).toLocaleString()}đ
+            {/* Credits */}
+            <div className="badge badge-neon !text-sm !py-1.5 !px-3" style={{ background: "rgba(168,85,247,0.12)", border: "1px solid rgba(168,85,247,0.3)" }}>
+              <span className="material-symbols-rounded text-sm" style={{ color: "#a855f7" }}>bolt</span>
+              <span style={{ color: "#a855f7", fontWeight: 700 }}>{(user.credits ?? 0).toLocaleString()}</span>
+              <span style={{ color: "var(--text-muted)", fontSize: "10px" }}>credits</span>
+            </div>
+            {/* Số Dư VND */}
+            <div className="badge badge-neon !text-sm !py-1.5 !px-3">
+              <span className="material-symbols-rounded text-sm">account_balance_wallet</span>
+              <span style={{ fontWeight: 700 }}>{(user.balance ?? 0).toLocaleString()}đ</span>
             </div>
 
             {/* Theme toggle */}

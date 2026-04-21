@@ -40,6 +40,7 @@ export default function LoginPage() {
           username: data.username,
           role: data.role,
           balance: data.balance,
+          credits: data.credits || 0,
           token: data.access_token,
         });
         router.push("/");

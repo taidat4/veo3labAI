@@ -295,7 +295,10 @@ export function SettingsPanel() {
             <span className="text-xs" style={{ color: "var(--success)" }}>🟢</span>
           </div>
           <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-            Số dư: <span className="font-bold" style={{ color: "var(--neon-purple)" }}>{user.balance.toLocaleString()} credits</span>
+            Credits: <span className="font-bold" style={{ color: "#a855f7" }}>{(user.credits ?? 0).toLocaleString()}</span>
+          </div>
+          <div className="text-xs" style={{ color: "var(--text-muted)" }}>
+            Số dư: <span className="font-bold" style={{ color: "var(--neon-blue)" }}>{(user.balance ?? 0).toLocaleString()}đ</span>
           </div>
         </div>
       )}

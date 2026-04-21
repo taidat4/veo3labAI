@@ -11,6 +11,7 @@ export interface UserData {
   username: string;
   role: string;
   balance: number;
+  credits: number;
   token: string;
 }
 

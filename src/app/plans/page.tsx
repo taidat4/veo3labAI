@@ -131,12 +131,13 @@ export default function PlansPage() {
       const res = await api.purchasePlan(plan.id);
       if (res.success) {
         showToast(`🎉 ${res.message}`, "success");
-        // Update user balance
+        // Update user balance + credits
         const stored = localStorage.getItem("veo3_user");
         const token = localStorage.getItem("veo3_token");
         if (stored && token) {
           const u = JSON.parse(stored);
           u.balance = res.new_balance;
+          u.credits = res.new_credits;
           localStorage.setItem("veo3_user", JSON.stringify(u));
           setUser({ ...u, token });
         }
@@ -173,6 +174,13 @@ export default function PlansPage() {
         {/* Balance bar */}
         <div className="max-w-lg mx-auto rounded-xl p-3 mb-6 flex items-center justify-between"
           style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.08), rgba(168,85,247,0.08))", border: "1px solid rgba(99,102,241,0.15)" }}>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-rounded text-xl" style={{ color: "#a855f7" }}>bolt</span>
+            <div>
+              <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Credits</p>
+              <p className="text-lg font-bold" style={{ color: "#a855f7" }}>{(user.credits ?? 0).toLocaleString()}</p>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
             <span className="material-symbols-rounded text-xl" style={{ color: "var(--neon-blue)" }}>account_balance_wallet</span>
             <div>

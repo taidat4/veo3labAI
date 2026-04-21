@@ -40,6 +40,7 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
         username=user.username,
         role=user.role,
         balance=user.balance,
+        credits=user.credits or 0,
     )
 
 
@@ -83,6 +84,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         username=user.username,
         role=user.role,
         balance=0,
+        credits=0,
     )
 
 
@@ -108,6 +110,7 @@ async def get_me(
         "email": user.email,
         "role": user.role,
         "balance": user.balance,
+        "credits": user.credits or 0,
         "is_banned": user.is_banned,
         "api_key": user.api_key,
         "plan_id": user.plan_id,

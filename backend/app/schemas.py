@@ -31,6 +31,7 @@ class TokenResponse(BaseModel):
     username: str
     role: str
     balance: int
+    credits: int = 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
