@@ -1,6 +1,6 @@
 /**
  * Deposit Page — Nạp tiền qua MBBank QR
- * User chọn mệnh giá → tạo QR → chuyển khoản → auto cộng credits
+ * User nạp VNĐ vào số dư → dùng số dư mua gói đăng ký
  */
 "use client";
 import { useEffect, useState, useRef } from "react";
@@ -10,15 +10,13 @@ import { Navbar } from "@/components/Navbar";
 import { Toast } from "@/components/Toast";
 
 const PRESET_AMOUNTS = [
-  { amount: 50000, label: "50K", credits: 50 },
-  { amount: 100000, label: "100K", credits: 100 },
-  { amount: 200000, label: "200K", credits: 200 },
-  { amount: 500000, label: "500K", credits: 500 },
-  { amount: 1000000, label: "1M", credits: 1000 },
-  { amount: 2000000, label: "2M", credits: 2000 },
+  { amount: 50000, label: "50K" },
+  { amount: 100000, label: "100K" },
+  { amount: 200000, label: "200K" },
+  { amount: 500000, label: "500K" },
+  { amount: 1000000, label: "1M" },
+  { amount: 2000000, label: "2M" },
 ];
-
-const CREDIT_RATE = 1000; // 1000 VND = 1 credit
 
 type DepositState = "select" | "qr" | "checking" | "success";
 
@@ -77,18 +75,17 @@ export default function DepositPage() {
   }, [state, depositInfo, showToast]);
 
   // Auto-poll verify — CHỈ khi user đã bấm "Đã chuyển khoản"
-  // ⚠️ Poll mỗi 15s, max 20 lần (5 phút) để tránh khóa MBBank
-  const MAX_CHECK_ATTEMPTS = 20;
+  // Poll mỗi 3s, max 200 lần (10 phút)
+  const MAX_CHECK_ATTEMPTS = 200;
   useEffect(() => {
     if (state !== "checking" || !depositInfo?.token) return;
 
     pollRef.current = setInterval(async () => {
       setCheckCount(prev => {
         if (prev >= MAX_CHECK_ATTEMPTS) {
-          // Đã check quá nhiều lần — dừng lại
           if (pollRef.current) clearInterval(pollRef.current);
-          showToast("⏰ Đã kiểm tra tối đa 20 lần. Vui lòng bấm 'Đã chuyển khoản' lại nếu chưa nhận được.", "error");
-          setState("qr"); // Quay lại hiện QR
+          showToast("⏰ Đã kiểm tra 10 phút. Vui lòng bấm 'Đã chuyển khoản' lại nếu chưa nhận được.", "error");
+          setState("qr");
           return 0;
         }
         return prev + 1;
@@ -104,7 +101,7 @@ export default function DepositPage() {
 
         if (data.status === "completed") {
           setState("success");
-          showToast(`🎉 Nạp thành công! +${data.credits?.toLocaleString()} credits`, "success");
+          showToast(`🎉 Nạp thành công! +${data.amount?.toLocaleString()}đ`, "success");
           // Update user balance
           if (data.new_balance != null) {
             const stored = localStorage.getItem("veo3_user");
@@ -118,7 +115,7 @@ export default function DepositPage() {
           if (pollRef.current) clearInterval(pollRef.current);
         }
       } catch {}
-    }, 15000); // 15 giây — an toàn cho MBBank
+    }, 3000);
 
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [state, depositInfo, showToast, setUser]);
@@ -126,7 +123,7 @@ export default function DepositPage() {
   const handleCreateDeposit = async () => {
     const amount = customAmount ? parseInt(customAmount) : selectedAmount;
     if (amount < 10000) {
-      showToast("Số tiền tối thiểu 10,000 VND", "error");
+      showToast("Số tiền tối thiểu 10,000đ", "error");
       return;
     }
 
@@ -162,7 +159,6 @@ export default function DepositPage() {
   };
 
   const activeAmount = customAmount ? parseInt(customAmount) || 0 : selectedAmount;
-  const activeCredits = Math.floor(activeAmount / CREDIT_RATE);
 
   if (!user) return null;
 
@@ -180,7 +176,7 @@ export default function DepositPage() {
           </div>
           <h1 className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>Nạp tiền</h1>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            Chuyển khoản MBBank — Credits cộng tự động
+            Chuyển khoản MBBank — Số dư cộng tự động
           </p>
         </div>
 
@@ -188,12 +184,19 @@ export default function DepositPage() {
         <div className="rounded-xl p-4 mb-6 flex items-center justify-between"
           style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.1), rgba(168,85,247,0.1))", border: "1px solid rgba(99,102,241,0.2)" }}>
           <div className="flex items-center gap-3">
-            <span className="material-symbols-rounded text-2xl" style={{ color: "var(--neon-blue)" }}>diamond</span>
+            <span className="material-symbols-rounded text-2xl" style={{ color: "var(--neon-blue)" }}>account_balance_wallet</span>
             <div>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>Số dư hiện tại</p>
-              <p className="text-xl font-bold" style={{ color: "var(--neon-blue)" }}>{user.balance?.toLocaleString()} credits</p>
+              <p className="text-xl font-bold" style={{ color: "var(--neon-blue)" }}>{(user.balance ?? 0).toLocaleString()}đ</p>
             </div>
           </div>
+          <button onClick={() => router.push("/plans")}
+            className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
+            style={{ background: "var(--bg-tertiary)", color: "var(--neon-purple)", border: "1px solid var(--border-subtle)" }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-hover)"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "var(--bg-tertiary)"}>
+            Mua gói →
+          </button>
         </div>
 
         {/* ═══ STATE: SELECT AMOUNT ═══ */}
@@ -221,7 +224,7 @@ export default function DepositPage() {
                   }}
                 >
                   <p className="text-lg font-bold">{p.label}</p>
-                  <p className="text-xs opacity-75">{p.credits.toLocaleString()} credits</p>
+                  <p className="text-xs opacity-75">{p.amount.toLocaleString()}đ</p>
                 </button>
               ))}
             </div>
@@ -229,7 +232,7 @@ export default function DepositPage() {
             {/* Custom amount */}
             <div className="mb-5">
               <label className="text-xs font-semibold block mb-2" style={{ color: "var(--text-muted)" }}>
-                Hoặc nhập số tiền tùy chỉnh (VNĐ)
+                Hoặc nhập số tiền tùy chỉnh
               </label>
               <div className="flex items-center gap-3">
                 <input
@@ -247,18 +250,9 @@ export default function DepositPage() {
 
             {/* Summary */}
             <div className="rounded-xl p-4 mb-5" style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-subtle)" }}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm" style={{ color: "var(--text-muted)" }}>Số tiền</span>
-                <span className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{activeAmount.toLocaleString()} VNĐ</span>
-              </div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm" style={{ color: "var(--text-muted)" }}>Tỷ giá</span>
-                <span className="text-sm" style={{ color: "var(--text-secondary)" }}>1,000 VNĐ = 1 credit</span>
-              </div>
-              <div className="h-px my-2" style={{ background: "var(--border-subtle)" }} />
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Nhận được</span>
-                <span className="text-lg font-bold" style={{ color: "#10b981" }}>+{activeCredits.toLocaleString()} credits</span>
+                <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Số tiền nạp</span>
+                <span className="text-lg font-bold" style={{ color: "#10b981" }}>+{activeAmount.toLocaleString()}đ</span>
               </div>
             </div>
 
@@ -318,7 +312,7 @@ export default function DepositPage() {
               {[
                 { label: "Ngân hàng", value: depositInfo.bank_name, icon: "account_balance" },
                 { label: "Số tài khoản", value: depositInfo.bank_account, icon: "credit_card", copy: true },
-                { label: "Số tiền", value: `${depositInfo.amount.toLocaleString()} VNĐ`, icon: "payments" },
+                { label: "Số tiền", value: `${depositInfo.amount.toLocaleString()}đ`, icon: "payments" },
                 { label: "Nội dung CK", value: depositInfo.transfer_content, icon: "description", copy: true },
               ].map((info) => (
                 <div key={info.label} className="flex items-center justify-between rounded-lg px-4 py-3"
@@ -368,9 +362,9 @@ export default function DepositPage() {
                   </span>
                 </div>
                 <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  Hệ thống sẽ tự động cộng credits khi nhận được chuyển khoản
+                  Hệ thống sẽ tự động cộng số dư khi nhận được chuyển khoản
                 </p>
-                <button onClick={() => { setState("select"); setDepositInfo(null); }}
+                <button onClick={() => { setState("select"); setDepositInfo(null); if (pollRef.current) clearInterval(pollRef.current); }}
                   className="mt-4 text-xs underline" style={{ color: "var(--text-muted)" }}>
                   Hủy
                 </button>
@@ -387,9 +381,9 @@ export default function DepositPage() {
               <span className="material-symbols-rounded text-4xl" style={{ color: "#10b981" }}>check_circle</span>
             </div>
             <h2 className="text-xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>Nạp tiền thành công!</h2>
-            <p className="text-3xl font-bold mb-1" style={{ color: "#10b981" }}>+{depositInfo.credits.toLocaleString()} credits</p>
+            <p className="text-3xl font-bold mb-1" style={{ color: "#10b981" }}>+{depositInfo.amount.toLocaleString()}đ</p>
             <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
-              {depositInfo.amount.toLocaleString()} VNĐ đã được chuyển đổi thành credits
+              Số dư đã được cộng vào tài khoản
             </p>
             <div className="flex gap-3 justify-center">
               <button onClick={() => { setState("select"); setDepositInfo(null); }}
@@ -419,10 +413,13 @@ export default function DepositPage() {
                   <span style={{ color: "#10b981" }}>②</span> Quét mã QR bằng app ngân hàng hoặc chuyển khoản thủ công
                 </li>
                 <li className="flex items-start gap-1.5">
-                  <span style={{ color: "#10b981" }}>③</span> Chuyển khoản đúng số tiền và nội dung — credits sẽ được cộng tự động
+                  <span style={{ color: "#10b981" }}>③</span> Số dư sẽ được cộng tự động sau khi chuyển khoản
                 </li>
                 <li className="flex items-start gap-1.5">
-                  <span style={{ color: "var(--text-muted)" }}>⚠️</span> Mã QR có hiệu lực trong 15 phút. Chuyển khoản sai nội dung sẽ không được tự động cộng
+                  <span style={{ color: "#10b981" }}>④</span> Dùng số dư để mua gói đăng ký và sử dụng dịch vụ
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span style={{ color: "var(--text-muted)" }}>⚠️</span> Chuyển khoản đúng nội dung để hệ thống tự động nhận diện
                 </li>
               </ul>
             </div>

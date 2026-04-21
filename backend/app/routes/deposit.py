@@ -25,13 +25,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/deposit", tags=["Deposit"])
 settings = get_settings()
 
-DEPOSIT_EXPIRY_MINUTES = 15
-CREDIT_RATE = 1000  # 1000 VND = 1 credit (admin có thể chỉnh)
+DEPOSIT_EXPIRY_MINUTES = 10
+# Không có credit rate — nạp VNĐ thẳng vào số dư
 
 # ── Cooldown cache: chống spam MBBank API ──
 # { token: last_query_timestamp }
 _mbbank_cooldown: dict[str, float] = {}
-MBBANK_COOLDOWN_SECONDS = 30  # Tối thiểu 30s giữa mỗi lần query MBBank
+MBBANK_COOLDOWN_SECONDS = 3  # Khớp với frontend poll 3s
 
 
 # ── Models ──
@@ -92,8 +92,8 @@ async def request_deposit(request: Request):
     if amount > 50_000_000:
         raise HTTPException(400, detail="Số tiền tối đa 50,000,000 VND")
 
-    # Tính credits
-    credits = amount // CREDIT_RATE
+    # Nạp thẳng VNĐ vào số dư
+    credits = amount  # credits = số tiền VNĐ
 
     # Tạo token unique
     token = f"VEO{secrets.token_hex(6).upper()}"
@@ -117,7 +117,7 @@ async def request_deposit(request: Request):
     safe_content = transfer_content.replace(" ", "%20")
     qr_url = f"https://img.vietqr.io/image/MB-{settings.MBBANK_ACCOUNT}-compact.png?amount={amount}&addInfo={safe_content}"
 
-    logger.info(f"💳 Deposit request: user={user_id}, amount={amount}, credits={credits}, token={token}")
+    logger.info(f"💳 Deposit request: user={user_id}, amount={amount}VNĐ, token={token}")
 
     return {
         "success": True,
@@ -222,14 +222,14 @@ async def verify_deposit(token: str, request: Request):
                 # Cleanup cooldown cache
                 _mbbank_cooldown.pop(token, None)
 
-                logger.info(f"💰 Deposit completed: user={pending.user_id}, +{pending.credits} credits ({pending.amount} VND)")
+                logger.info(f"💰 Deposit completed: user={pending.user_id}, +{pending.amount:,}VNĐ")
 
                 return {
                     "success": True,
                     "status": "completed",
-                    "credits": pending.credits,
+                    "amount": pending.amount,
                     "new_balance": db_user.balance if db_user else 0,
-                    "message": f"Nạp thành công! +{pending.credits:,} credits",
+                    "message": f"Nạp thành công! +{pending.amount:,}đ",
                 }
             else:
                 return {"success": False, "status": "pending", "message": "Đang chờ thanh toán..."}

@@ -69,14 +69,14 @@ export function Navbar() {
         })}
       </div>
 
-      {/* Right side: credits + avatar */}
+      {/* Right side: Số Dư + avatar */}
       <div className="ml-auto flex items-center gap-3">
         {user && (
           <>
-            {/* Credits */}
+            {/* Số Dư */}
             <div className="badge badge-neon">
-              <span className="material-symbols-rounded text-xs">diamond</span>
-              {user.balance.toLocaleString()} credits
+              <span className="material-symbols-rounded text-xs">account_balance_wallet</span>
+              {(user.balance ?? 0).toLocaleString()}đ
             </div>
 
             {/* Theme toggle */}

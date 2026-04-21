@@ -306,7 +306,7 @@ class NanoAIClient:
           Processing: {"success": false, "code": "processing", ...}
           Success:    {"success": true, "code": "success", "data": {"mediaId":"...", "mediaUrl":"..."}}
         """
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=20) as client:
             resp = await client.get(
                 f"{self.V2_BASE}/task",
                 params={"taskId": task_id},

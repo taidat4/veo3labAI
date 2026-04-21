@@ -1147,14 +1147,16 @@ async def _poll_upscale_direct_google(job_id: int, user_id: int, operation_name:
 
 
 async def _poll_upscale_nanoai(job_id: int, user_id: int, task_id: str):
-    """Background: poll NanoAI V2 task status until upscale done"""
+    """Background: poll NanoAI V2 task status until upscale done.
+    ⚠️ Timeout 20s per request, max 40 polls (200s = ~3.5 phút)"""
     import asyncio
     from app.nanoai_client import get_nanoai_client
     from app.async_worker import update_job, publish_progress
 
     nano = get_nanoai_client()
+    empty_success_count = 0  # Track success responses without URL
 
-    for i in range(60):  # Max 5 min (60 × 5s)
+    for i in range(40):  # Max ~3.5 min (40 × 5s)
         await asyncio.sleep(5)
 
         try:
@@ -1376,8 +1378,12 @@ async def _poll_upscale_nanoai(job_id: int, user_id: int, task_id: str):
                     return
 
                 import json as _json
-                logger.warning(f"⚠️ Upscale success but no URL/rawBytes found. FULL: {_json.dumps(result, default=str)[:2000]}")
-                # ★ Không return error — tiếp tục polling vì NanoAI có thể trả success sớm trước khi URL ready
+                empty_success_count += 1
+                logger.warning(f"⚠️ Upscale success but no URL/rawBytes ({empty_success_count}/5). FULL: {_json.dumps(result, default=str)[:1000]}")
+                if empty_success_count >= 5:
+                    logger.error(f"🔴 5x success without URL — giving up")
+                    await _save_upscale_error(job_id, user_id, "Upscale hoàn thành nhưng không trả URL (5 lần)")
+                    return
                 continue
 
             if code in ("error", "failed", "not_found"):
@@ -1438,7 +1444,7 @@ async def _poll_upscale_nanoai(job_id: int, user_id: int, task_id: str):
         except Exception as e:
             logger.error(f"Upscale poll error: {e}")
 
-    logger.warning(f"⚠️ Upscale timeout for job {job_id}")
+    logger.warning(f"⚠️ Upscale timeout for job {job_id} after {40*5}s")
     # Clean up on timeout — ★ RACE GUARD
     async with async_session_factory() as session:
         job_result = await session.execute(
