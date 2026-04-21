@@ -420,7 +420,7 @@ export function VideoCard({ job, compact = false, selectable = false, selected =
                 ⏳ Upscaling...
               </span>
             )}
-            {hasUpscaleUrl && (
+            {hasUpscaleUrl && !isImage && (
               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold"
                 style={{ background: "rgba(34,197,94,0.9)", color: "white" }}>
                 ✅ HD
