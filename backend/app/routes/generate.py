@@ -489,6 +489,21 @@ async def get_queue_status(request: Request):
     }
 
 
+
+@router.get("/credit-costs")
+async def get_public_credit_costs(db: AsyncSession = Depends(get_db)):
+    """Public: get credit costs for video/image generation."""
+    from app.models import SystemSetting
+    video_r = await db.execute(select(SystemSetting).where(SystemSetting.key == "credit_cost_video"))
+    image_r = await db.execute(select(SystemSetting).where(SystemSetting.key == "credit_cost_image"))
+    video_s = video_r.scalar_one_or_none()
+    image_s = image_r.scalar_one_or_none()
+    return {
+        "video_credits": int(video_s.value) if video_s else 1,
+        "image_credits": int(image_s.value) if image_s else 1,
+    }
+
+
 @router.get("/plans")
 async def list_public_plans(db: AsyncSession = Depends(get_db)):
     """Public: list active subscription plans for pricing page."""

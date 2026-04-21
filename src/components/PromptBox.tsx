@@ -3,7 +3,7 @@
  * Features: single prompt, bulk import (file .txt / paste), style chips
  */
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
@@ -45,9 +45,23 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
   const [bulkText, setBulkText] = useState("");
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [showCreditModal, setShowCreditModal] = useState(false);
+  const [creditCosts, setCreditCosts] = useState({ video: 1, image: 1 });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  // Fetch credit costs from admin settings
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/credit-costs");
+        if (res.ok) {
+          const data = await res.json();
+          setCreditCosts({ video: data.video_credits || 1, image: data.image_credits || 1 });
+        }
+      } catch { }
+    })();
+  }, []);
 
   const user = useStore((s) => s.user);
   const aspectRatio = useStore((s) => s.aspectRatio);
@@ -63,6 +77,7 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
   const currentModel = isVideo
     ? (VIDEO_MODELS.find((m) => m.key === videoModel) || VIDEO_MODELS[0])
     : (IMAGE_MODELS.find((m) => m.key === imageModel) || IMAGE_MODELS[0]);
+  const creditPerItem = isVideo ? creditCosts.video : creditCosts.image;
   const totalCost = currentModel.price * numberOfOutputs;
 
   const parseBulkPrompts = (text: string) =>
@@ -275,7 +290,7 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
             <span className="text-xs" style={{ color: "var(--prompt-placeholder)" }}>
               {currentModel.label} · {aspectRatio} · x{numberOfOutputs}
             </span>
-            <span className="badge badge-neon !text-[10px]">{(currentModel.credits * numberOfOutputs)} credits</span>
+            <span className="badge badge-neon !text-[10px]">{(creditPerItem * numberOfOutputs)} credits</span>
           </div>
         </div>
       </div>
@@ -338,7 +353,7 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
                   </>
                 ) : "Chưa có prompt nào"}
               </span>
-              <span className="badge badge-neon">{(currentModel.credits * numberOfOutputs * bulkPrompts.length)} credits</span>
+              <span className="badge badge-neon">{(creditPerItem * numberOfOutputs * bulkPrompts.length)} credits</span>
             </div>
 
             {bulkPrompts.length > 0 && (
