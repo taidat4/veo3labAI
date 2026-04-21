@@ -39,7 +39,17 @@ export function VideoCard({ job, compact = false, selectable = false, selected =
     if (job.upscale_status !== "processing" || upscaling) return;
     // Backend says processing but no active poll → resume
     addUpscalingJob(job.id);
+    let pollCount = 0;
+    const MAX_POLLS = 45; // ~6 phút (8s × 45)
     const pollInterval = setInterval(async () => {
+      pollCount++;
+      if (pollCount > MAX_POLLS) {
+        clearInterval(pollInterval);
+        removeUpscalingJob(job.id);
+        updateHistoryJob(job.id, { upscale_status: undefined });
+        showToast("⏰ Upscale timeout — thử lại sau", "error");
+        return;
+      }
       try {
         const st = await api.getUpscaleStatus(job.id);
         if (st.status === "completed" && st.upscale_url) {
@@ -48,7 +58,6 @@ export function VideoCard({ job, compact = false, selectable = false, selected =
           updateHistoryJob(job.id, { upscale_status: "completed", upscale_url: st.upscale_url });
           showToast("✅ Upscale hoàn tất!", "success");
         } else if (st.status === "not_started" && !st.upscale_error) {
-          // Task cleared without error (completed elsewhere)
           clearInterval(pollInterval);
           removeUpscalingJob(job.id);
         } else if (st.status === "not_started" && st.upscale_error) {
@@ -193,7 +202,16 @@ export function VideoCard({ job, compact = false, selectable = false, selected =
           showToast("⏳ Đang upscale 1080p (~1-3 phút)...", "info");
           // Poll for completion
           let retried = false;
+          let pollCount2 = 0;
+          const MAX_POLLS_2 = 45; // ~6 phút
           const pollInterval = setInterval(async () => {
+            pollCount2++;
+            if (pollCount2 > MAX_POLLS_2) {
+              clearInterval(pollInterval);
+              removeUpscalingJob(job.id);
+              showToast("⏰ Upscale quá 6 phút — thử lại sau", "error");
+              return;
+            }
             try {
               const st = await api.getUpscaleStatus(job.id);
               if (st.status === "completed" && st.upscale_url) {
