@@ -184,20 +184,33 @@ async def close_redis():
 
 
 async def init_db():
-    """Tạo tất cả bảng (dùng cho dev)"""
+    """Tạo tất cả bảng + auto-migrate"""
+    from sqlalchemy import text as sa_text
+
+    # ── Step 1: Create all tables first (for new deployments) ──
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    print("[DB] ✅ All tables created/verified")
 
-    # Auto-migrate: add 'credits' column if missing
-    async with engine.begin() as conn:
-        try:
+    # ── Step 2: Auto-migrate credits column if missing ──
+    try:
+        async with engine.begin() as conn:
             if is_sqlite:
-                await conn.execute(__import__("sqlalchemy").text(
-                    "ALTER TABLE users ADD COLUMN credits INTEGER DEFAULT 0"
-                ))
+                # SQLite: check pragma
+                result = await conn.execute(sa_text("PRAGMA table_info(users)"))
+                columns = [row[1] for row in result.fetchall()]
+                if "credits" not in columns:
+                    await conn.execute(sa_text(
+                        "ALTER TABLE users ADD COLUMN credits INTEGER DEFAULT 0"
+                    ))
+                    print("[MIGRATE] ✅ Added 'credits' column")
+                else:
+                    print("[MIGRATE] credits column exists — OK")
             else:
-                await conn.execute(__import__("sqlalchemy").text(
+                # PostgreSQL: IF NOT EXISTS
+                await conn.execute(sa_text(
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS credits INTEGER DEFAULT 0"
                 ))
-        except Exception:
-            pass  # Column already exists
+                print("[MIGRATE] ✅ credits column ready")
+    except Exception as e:
+        print(f"[MIGRATE] credits migration: {e}")
