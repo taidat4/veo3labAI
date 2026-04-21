@@ -136,7 +136,7 @@ export default function PlansPage() {
     finally { setDepositLoading(false); }
   };
 
-  const [buyingPlanId, setBuyingPlanId] = useState<number | null>(null);
+
 
   const handleBuyPlan = async (plan: Plan) => {
     if (!user) return;
