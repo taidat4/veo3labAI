@@ -43,6 +43,7 @@ export function SettingsPanel() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [show4kTooltip, setShow4kTooltip] = useState(false);
   const [queueStatus, setQueueStatus] = useState<{ active: number; max: number; waiting: number }>({ active: 0, max: 8, waiting: 0 });
+  const [creditCosts, setCreditCosts] = useState({ video: 1, image: 1 });
 
   const isVideo = mediaTab === "video";
   const currentModels = isVideo ? VIDEO_MODELS : IMAGE_MODELS;
@@ -50,7 +51,8 @@ export function SettingsPanel() {
   const currentModelKey = isVideo ? videoModel : imageModel;
   const currentModel = currentModels.find((m) => m.key === currentModelKey) || currentModels[0];
   const totalCost = currentModel.price * numberOfOutputs;
-  const totalCredits = currentModel.credits * numberOfOutputs;
+  const creditPerItem = isVideo ? creditCosts.video : creditCosts.image;
+  const totalCredits = creditPerItem * numberOfOutputs;
 
   const handleModelChange = (key: string) => {
     if (isVideo) setVideoModel(key);
@@ -68,6 +70,19 @@ export function SettingsPanel() {
   useEffect(() => {
     if (user) fetchQueue();
   }, [user, fetchQueue]);
+
+  // Fetch credit costs from admin settings
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/credit-costs");
+        if (res.ok) {
+          const data = await res.json();
+          setCreditCosts({ video: data.video_credits || 1, image: data.image_credits || 1 });
+        }
+      } catch { }
+    })();
+  }, []);
 
   // Always poll queue status to keep slot counter accurate
   useEffect(() => {
