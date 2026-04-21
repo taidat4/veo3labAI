@@ -220,7 +220,7 @@ async def report_account_result(email: str, success: bool, error: str = ""):
 
 
 async def refund_user(user_id: int, job_id: int):
-    """Refund user when job fails"""
+    """Refund credits when job fails"""
     async with async_session_factory() as session:
         job = (await session.execute(
             select(GenerationJob).where(GenerationJob.id == job_id)
@@ -234,22 +234,29 @@ async def refund_user(user_id: int, job_id: int):
         if not user:
             return
 
-        prev = user.balance
-        new_balance = prev + job.cost
-        await session.execute(
-            sql_update(User).where(User.id == user_id).values(balance=new_balance)
-        )
+        # Refund credits (not VND)
+        try:
+            prev_credits = user.credits or 0
+            new_credits = prev_credits + job.cost
+            user.credits = new_credits
+        except Exception:
+            from sqlalchemy import text as sa_text
+            prev_credits = 0
+            new_credits = job.cost
+            await session.execute(sa_text(
+                f"UPDATE users SET credits = COALESCE(credits, 0) + {job.cost} WHERE id = {user_id}"
+            ))
 
         session.add(BalanceHistory(
             user_id=user_id,
-            previous_amount=prev,
+            previous_amount=prev_credits,
             changed_amount=job.cost,
-            current_amount=new_balance,
-            content=f"Hoàn tiền video thất bại #{job_id}",
+            current_amount=new_credits,
+            content=f"Hoàn {job.cost} credits — job #{job_id} thất bại",
             type="refund",
         ))
         await session.commit()
-        logger.info(f"💰 Refunded {job.cost}đ to user #{user_id}")
+        logger.info(f"💰 Refunded {job.cost} credits to user #{user_id}")
 
 
 async def fail_job(job_id: int, user_id: int, error: str):

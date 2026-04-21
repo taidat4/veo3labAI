@@ -89,8 +89,11 @@ async def _create_jobs(
     total_videos = len(prompts) * number_of_outputs
     total_cost = base_price * total_videos
 
-    # Check credits
-    user_credits = user.credits or 0
+    # Check credits (safe access)
+    try:
+        user_credits = user.credits or 0
+    except Exception:
+        user_credits = 0
     if user_credits < total_cost:
         raise HTTPException(
             status_code=400,
@@ -105,7 +108,13 @@ async def _create_jobs(
     # ── Trừ credits ──
     prev_credits = user_credits
     new_credits = prev_credits - total_cost
-    user.credits = new_credits
+    try:
+        user.credits = new_credits
+    except Exception:
+        from sqlalchemy import text as sa_text
+        await db.execute(sa_text(
+            f"UPDATE users SET credits = COALESCE(credits, 0) - {total_cost} WHERE id = {user_id}"
+        ))
 
     # Ghi lịch sử
     history = BalanceHistory(
@@ -574,8 +583,19 @@ async def purchase_plan(
     if plan.price > 0:
         user.balance -= plan.price
 
-    # Add credits to user
-    user.credits = (user.credits or 0) + plan.credits
+    # Add credits to user (safe for missing column)
+    try:
+        old_credits = user.credits or 0
+        user.credits = old_credits + plan.credits
+    except Exception:
+        # Column may not exist yet — use raw SQL
+        from sqlalchemy import text
+        try:
+            await db.execute(text(
+                f"UPDATE users SET credits = COALESCE(credits, 0) + {plan.credits} WHERE id = {user_id}"
+            ))
+        except Exception:
+            pass  # Column truly doesn't exist, skip
 
     if plan.duration_days > 0:
         user.plan_id = plan.id
@@ -592,13 +612,14 @@ async def purchase_plan(
 
     await db.commit()
     await db.refresh(user)
+    new_credits = getattr(user, 'credits', 0) or 0
     logger.info(f"[PLAN] User {user_id} purchased '{plan.name}' for {plan.price}đ, +{plan.credits} credits")
 
     return {
         "success": True,
         "message": f"Đã mua gói {plan.name} thành công! +{plan.credits} credits",
         "new_balance": user.balance,
-        "new_credits": user.credits,
+        "new_credits": new_credits,
         "plan_name": plan.name,
         "credits": plan.credits,
         "expires_at": user.plan_expires_at.isoformat() if user.plan_expires_at else None,

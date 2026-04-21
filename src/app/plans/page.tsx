@@ -149,7 +149,7 @@ export default function PlansPage() {
     }
   };
 
-  const subscriptionPlans = plans.filter((p) => p.duration_days > 0);
+  const subscriptionPlans = plans.filter((p) => p.duration_days > 0).sort((a, b) => a.price - b.price);
   const creditPacks = plans.filter((p) => p.duration_days === 0 && p.price > 0);
   const activeAmount = customAmount ? parseInt(customAmount) || 0 : selectedAmount;
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
@@ -215,23 +215,26 @@ export default function PlansPage() {
             {loadingPlans && <div className="flex justify-center py-16"><div className="spinner spinner-lg" /></div>}
 
             {!loadingPlans && subscriptionPlans.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8" style={{ alignItems: "stretch" }}>
                 {subscriptionPlans.map((plan, idx) => {
-                  const isPopular = idx === 2;
                   const isFree = plan.price === 0;
+                  const paidPlans = subscriptionPlans.filter(p => p.price > 0);
+                  const middleIdx = Math.floor(paidPlans.length / 2);
+                  const isPopular = !isFree && paidPlans[middleIdx]?.id === plan.id;
                   return (
                     <div key={plan.id} className="relative rounded-2xl p-5 flex flex-col transition-all hover:scale-[1.02]"
                       style={{
                         background: isPopular ? "linear-gradient(160deg, rgba(99,102,241,0.12), rgba(168,85,247,0.08))" : "var(--bg-card-solid)",
                         border: isPopular ? "2px solid var(--neon-blue)" : "1px solid var(--border-subtle)",
                         boxShadow: isPopular ? "0 8px 40px rgba(99,102,241,0.2)" : "var(--shadow-card)",
+                        minHeight: 320,
                       }}>
                       {isPopular && (
                         <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[10px] font-bold text-white"
                           style={{ background: "linear-gradient(135deg, var(--neon-blue), var(--neon-purple))" }}>⭐ PHỔ BIẾN</div>
                       )}
                       <h3 className="text-base font-bold mb-1" style={{ color: "var(--text-primary)" }}>{plan.name}</h3>
-                      <p className="text-[11px] mb-3" style={{ color: "var(--text-muted)" }}>{plan.description}</p>
+                      <p className="text-[11px] mb-3" style={{ color: "var(--text-muted)", minHeight: 30 }}>{plan.description}</p>
                       <div className="mb-3">
                         <span className="text-2xl font-extrabold" style={{ color: isFree ? "#10b981" : "var(--text-primary)" }}>
                           {isFree ? "Miễn phí" : `${plan.price.toLocaleString()}đ`}
@@ -243,13 +246,13 @@ export default function PlansPage() {
                         <span className="text-sm font-bold" style={{ color: "var(--neon-blue)" }}>{plan.credits.toLocaleString()} credits</span>
                       </div>
                       <ul className="flex-1 space-y-1.5 mb-4">
-                        {plan.features.map((f, i) => (
+                        {(Array.isArray(plan.features) ? plan.features : []).map((f: string, i: number) => (
                           <li key={i} className="flex items-start gap-1.5 text-[11px]" style={{ color: "var(--text-secondary)" }}>
                             <span className="material-symbols-rounded text-xs mt-px" style={{ color: "#10b981" }}>check_circle</span>{f}
                           </li>
                         ))}
                       </ul>
-                      <button onClick={() => handleBuyPlan(plan)} className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all"
+                      <button onClick={() => handleBuyPlan(plan)} className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all mt-auto"
                         style={{
                           background: isPopular ? "linear-gradient(135deg, var(--neon-blue), var(--neon-purple))" : isFree ? "linear-gradient(135deg, #10b981, #059669)" : "var(--bg-tertiary)",
                           color: isPopular || isFree ? "white" : "var(--text-primary)",
