@@ -1619,88 +1619,37 @@ async def upscale_image(
             task_id = upscale_result.get("taskId") or upscale_result.get("task_id")
             if task_id:
                 logger.info(f"⏳ Image upscale async taskId: {task_id}")
-                # ★ Save task_id to job params for persistence across reload/tab switch
+                # ★ Save task_id and return IMMEDIATELY — poll in background
                 params["upscale_task_id"] = task_id
+                params["upscale_status"] = "processing"
+                params["upscale_resolution"] = target_resolution
                 job.params = params
                 await db.commit()
 
-                # Poll for result
-                import asyncio
-                for i in range(30):  # max 2.5 min
-                    await asyncio.sleep(5)
-                    task_status = await nano.get_v2_task_status(task_id)
-                    t_code = task_status.get("code", "")
-                    t_success = task_status.get("success", False)
-                    logger.info(f"📊 Image upscale poll: code={t_code} success={t_success} ({(i+1)*5}s) full={str(task_status)[:500]}")
-
-                    if t_success and (t_code == "success" or t_code == "" or not t_code):
-                        t_data = task_status.get("data", {}) or {}
-                        t_result = task_status.get("result", {}) or {}
-
-                        # ★ FIX 2+5: CHECK NOT_FOUND at top level — stop polling immediately
-                        t_status = str(task_status.get("status", "")).upper()
-                        t_message = str(task_status.get("message", "")).lower()
-                        if t_status == "NOT_FOUND" or "not found" in t_message or "requested entity was not found" in t_message:
-                            logger.error(f"🔴 Image upscale NOT_FOUND — media_id expired or wrong project. Stopping poll.")
-                            last_error = "Media not found (404) — media_id hết hạn hoặc sai project"
-                            params.pop("upscale_task_id", None)
-                            job.params = params
-                            await db.commit()
-                            break  # STOP polling immediately
-
-                        # ★ CHECK for error inside result (NanoAI returns success=True but result.error = 401/404)
-                        if isinstance(t_result, dict) and t_result.get("error"):
-                            err_info = t_result["error"]
-                            err_code = err_info.get("code", 0) if isinstance(err_info, dict) else 0
-                            err_msg = err_info.get("message", str(err_info)) if isinstance(err_info, dict) else str(err_info)
-                            logger.error(f"🔴 Image upscale API error inside result: code={err_code} msg={err_msg[:200]}")
-                            if err_code in (401, 404):
-                                last_error = f"API error ({err_code}): {err_msg[:100]}"
-                                params.pop("upscale_task_id", None)
-                                job.params = params
-                                await db.commit()
-                                break  # STOP polling
-                            continue  # Other error — keep polling
-
-                        # Search encodedImage in multiple places
-                        enc = (
-                            t_result.get("encodedImage") or t_data.get("encodedImage") or
-                            task_status.get("encodedImage") or ""
+                # ★ Start background poll thread (same pattern as video upscale)
+                import threading
+                def _bg_poll_image_upscale():
+                    import asyncio as _aio
+                    loop = _aio.new_event_loop()
+                    _aio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(
+                            _poll_image_upscale_nanoai(job_id, task_id, account["email"], target_resolution, cache_key)
                         )
-                        if enc:
-                            data_uri = f"data:image/png;base64,{enc}"
-                            params[cache_key] = data_uri
-                            params["upscale_url"] = data_uri
-                            params.pop("upscale_task_id", None)
-                            job.params = params
-                            await db.commit()
-                            await report_account_result(account["email"], True)
-                            return {"success": True, "status": "completed", "upscale_url": data_uri, "resolution": target_resolution}
-                        # Search URL in multiple places
-                        m_url = ""
-                        for src in [t_data, t_result, task_status]:
-                            if isinstance(src, dict):
-                                m_url = src.get("mediaUrl") or src.get("url") or src.get("imageUrl") or src.get("fileUrl") or src.get("fifeUrl") or ""
-                                if m_url:
-                                    break
-                        if m_url:
-                            params[cache_key] = m_url
-                            params["upscale_url"] = m_url
-                            params.pop("upscale_task_id", None)
-                            job.params = params
-                            await db.commit()
-                            await report_account_result(account["email"], True)
-                            return {"success": True, "status": "completed", "upscale_url": m_url, "resolution": target_resolution}
+                    except Exception as e:
+                        logger.error(f"🔴 Image upscale bg error: {e}")
+                    finally:
+                        loop.close()
 
-                    if t_code in ("error", "failed"):
-                        last_error = task_status.get("message", t_code)
-                        params.pop("upscale_task_id", None)
-                        job.params = params
-                        await db.commit()
-                        break
+                t = threading.Thread(target=_bg_poll_image_upscale, daemon=True)
+                t.start()
+                logger.info(f"🚀 Image upscale background thread started for job {job_id}")
 
-                await report_account_result(account["email"], False, last_error or "upscale task timeout")
-                continue
+                return {
+                    "success": True,
+                    "status": "processing",
+                    "message": "Đang upscale ảnh (~1-2 phút)...",
+                }
 
             last_error = "Không nhận được kết quả từ API"
             continue
@@ -1714,3 +1663,153 @@ async def upscale_image(
     raise HTTPException(status_code=502, detail=f"Upscale lỗi sau {MAX_RETRIES} lần thử: {last_error}")
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# BACKGROUND: Poll Image Upscale (runs in separate thread)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def _poll_image_upscale_nanoai(job_id: int, task_id: str, account_email: str, target_resolution: str, cache_key: str):
+    """Background poll for image upscale — same pattern as video upscale."""
+    import asyncio
+    from app.nanoai_client import get_nanoai_client
+    from app.async_worker import report_account_result
+
+    nano = get_nanoai_client()
+    MAX_POLLS = 40  # 40 × 5s = ~3.5 min
+    empty_success_count = 0
+
+    for i in range(MAX_POLLS):
+        await asyncio.sleep(5)
+
+        try:
+            # ★ Race guard: check if task_id still matches (another upscale may have started)
+            async with async_session_factory() as session:
+                result = await session.execute(
+                    select(GenerationJob).where(GenerationJob.id == job_id)
+                )
+                job = result.scalar_one_or_none()
+                if not job:
+                    logger.error(f"🔴 Image upscale: job {job_id} not found")
+                    return
+
+                params = job.params or {}
+                current_task = params.get("upscale_task_id", "")
+                if current_task != task_id:
+                    logger.info(f"🛑 Image upscale: task_id mismatch ({task_id[:16]} vs {current_task[:16]}) — stopping")
+                    return
+
+            task_status = await nano.get_v2_task_status(task_id)
+            t_code = task_status.get("code", "")
+            t_success = task_status.get("success", False)
+            logger.info(f"📊 Image upscale bg poll: code={t_code} success={t_success} ({(i+1)*5}s)")
+
+            if t_success and (t_code == "success" or t_code == "" or not t_code):
+                t_data = task_status.get("data", {}) or {}
+                t_result = task_status.get("result", {}) or {}
+
+                # CHECK NOT_FOUND
+                t_status = str(task_status.get("status", "")).upper()
+                t_message = str(task_status.get("message", "")).lower()
+                if t_status == "NOT_FOUND" or "not found" in t_message:
+                    logger.error(f"🔴 Image upscale NOT_FOUND — stopping")
+                    async with async_session_factory() as session:
+                        j = (await session.execute(select(GenerationJob).where(GenerationJob.id == job_id))).scalar_one_or_none()
+                        if j:
+                            p = dict(j.params or {})
+                            p.pop("upscale_task_id", None)
+                            p["upscale_status"] = "failed"
+                            p["upscale_error"] = "Media not found (404)"
+                            j.params = p
+                            await session.commit()
+                    return
+
+                # CHECK error inside result
+                if isinstance(t_result, dict) and t_result.get("error"):
+                    err_info = t_result["error"]
+                    err_code = err_info.get("code", 0) if isinstance(err_info, dict) else 0
+                    if err_code in (401, 404):
+                        async with async_session_factory() as session:
+                            j = (await session.execute(select(GenerationJob).where(GenerationJob.id == job_id))).scalar_one_or_none()
+                            if j:
+                                p = dict(j.params or {})
+                                p.pop("upscale_task_id", None)
+                                p["upscale_status"] = "failed"
+                                p["upscale_error"] = f"API error ({err_code})"
+                                j.params = p
+                                await session.commit()
+                        return
+                    continue
+
+                # Search encodedImage
+                enc = t_result.get("encodedImage") or t_data.get("encodedImage") or task_status.get("encodedImage") or ""
+                if enc:
+                    data_uri = f"data:image/png;base64,{enc}"
+                    async with async_session_factory() as session:
+                        j = (await session.execute(select(GenerationJob).where(GenerationJob.id == job_id))).scalar_one_or_none()
+                        if j:
+                            p = dict(j.params or {})
+                            p[cache_key] = data_uri
+                            p["upscale_url"] = data_uri
+                            p.pop("upscale_task_id", None)
+                            p["upscale_status"] = "completed"
+                            j.params = p
+                            await session.commit()
+                    await report_account_result(account_email, True)
+                    logger.info(f"🎉 Image upscale done (base64)! job={job_id}")
+                    return
+
+                # Search URL
+                m_url = ""
+                for src in [t_data, t_result, task_status]:
+                    if isinstance(src, dict):
+                        m_url = src.get("mediaUrl") or src.get("url") or src.get("imageUrl") or src.get("fileUrl") or src.get("fifeUrl") or ""
+                        if m_url:
+                            break
+                if m_url:
+                    async with async_session_factory() as session:
+                        j = (await session.execute(select(GenerationJob).where(GenerationJob.id == job_id))).scalar_one_or_none()
+                        if j:
+                            p = dict(j.params or {})
+                            p[cache_key] = m_url
+                            p["upscale_url"] = m_url
+                            p.pop("upscale_task_id", None)
+                            p["upscale_status"] = "completed"
+                            j.params = p
+                            await session.commit()
+                    await report_account_result(account_email, True)
+                    logger.info(f"🎉 Image upscale done (URL)! job={job_id} url={m_url[:80]}")
+                    return
+
+                # Success but no data — count
+                empty_success_count += 1
+                if empty_success_count >= 5:
+                    logger.error(f"🔴 Image upscale: 5 success with no data — stopping")
+                    break
+
+            if t_code in ("error", "failed"):
+                err_msg = task_status.get("message", t_code)
+                logger.error(f"🔴 Image upscale failed: {err_msg}")
+                async with async_session_factory() as session:
+                    j = (await session.execute(select(GenerationJob).where(GenerationJob.id == job_id))).scalar_one_or_none()
+                    if j:
+                        p = dict(j.params or {})
+                        p.pop("upscale_task_id", None)
+                        p["upscale_status"] = "failed"
+                        p["upscale_error"] = str(err_msg)[:200]
+                        j.params = p
+                        await session.commit()
+                return
+
+        except Exception as e:
+            logger.error(f"⚠️ Image upscale poll error: {e}")
+
+    # Timeout
+    logger.error(f"🔴 Image upscale timeout job={job_id}")
+    async with async_session_factory() as session:
+        j = (await session.execute(select(GenerationJob).where(GenerationJob.id == job_id))).scalar_one_or_none()
+        if j:
+            p = dict(j.params or {})
+            p.pop("upscale_task_id", None)
+            p["upscale_status"] = "failed"
+            p["upscale_error"] = "Upscale timeout — quá 3.5 phút"
+            j.params = p
+            await session.commit()
