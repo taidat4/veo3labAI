@@ -305,7 +305,7 @@ export function SettingsPanel() {
 
       {/* ═══ Voice (Thành phần tab only) ═══ */}
       {isVideo && videoSubTab === "components" && (
-        <div>
+        <div className="relative">
           <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
             🎙️ Giọng nói:
           </label>
@@ -326,45 +326,50 @@ export function SettingsPanel() {
           </button>
 
           {showVoicePanel && (
-            <div className="mt-2 rounded-lg overflow-hidden max-h-[250px] overflow-y-auto" style={{
-              background: "var(--bg-elevated)",
-              border: "1px solid var(--border-subtle)",
-            }}>
-              {/* Clear voice */}
-              {selectedVoice && (
-                <button
-                  onClick={() => { setSelectedVoice(null); setShowVoicePanel(false); }}
-                  className="w-full text-left px-3 py-2 text-xs transition-colors flex items-center gap-2"
-                  style={{ color: "var(--error)", borderBottom: "1px solid var(--border-subtle)" }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-hover)"}
-                  onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                >
-                  <span className="material-symbols-rounded text-sm">close</span>
-                  Bỏ giọng nói
-                </button>
-              )}
-              {VOICES.map((v) => (
-                <button
-                  key={v.id}
-                  onClick={() => { setSelectedVoice(v.id); setShowVoicePanel(false); }}
-                  className="w-full text-left px-3 py-2.5 text-xs transition-colors flex items-center gap-2.5"
-                  style={{
-                    color: selectedVoice === v.id ? "white" : "var(--text-secondary)",
-                    background: selectedVoice === v.id ? "rgba(139,92,246,0.2)" : "transparent",
-                  }}
-                  onMouseEnter={(e) => { if (selectedVoice !== v.id) e.currentTarget.style.background = "var(--bg-hover)"; }}
-                  onMouseLeave={(e) => { if (selectedVoice !== v.id) e.currentTarget.style.background = "transparent"; }}
-                >
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: v.color + "30" }}>
-                    <span className="material-symbols-rounded" style={{ fontSize: "14px", color: v.color }}>graphic_eq</span>
-                  </div>
-                  <div>
-                    <div className="font-semibold" style={{ color: "var(--text-primary)" }}>{v.name}</div>
-                    <div style={{ color: "var(--text-muted)", fontSize: "10px" }}>{v.desc}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
+            <>
+              {/* Backdrop to close */}
+              <div className="fixed inset-0 z-40" onClick={() => setShowVoicePanel(false)} />
+              <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-lg overflow-hidden max-h-[280px] overflow-y-auto" style={{
+                background: "var(--bg-card-solid)",
+                border: "1px solid var(--border-subtle)",
+                boxShadow: "var(--shadow-dropdown)",
+              }}>
+                {/* Clear voice */}
+                {selectedVoice && (
+                  <button
+                    onClick={() => { setSelectedVoice(null); setShowVoicePanel(false); }}
+                    className="w-full text-left px-3 py-2 text-xs transition-colors flex items-center gap-2"
+                    style={{ color: "var(--error)", borderBottom: "1px solid var(--border-subtle)" }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-hover)"}
+                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                  >
+                    <span className="material-symbols-rounded text-sm">close</span>
+                    Bỏ giọng nói
+                  </button>
+                )}
+                {VOICES.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => { setSelectedVoice(v.id); setShowVoicePanel(false); }}
+                    className="w-full text-left px-3 py-2.5 text-xs transition-colors flex items-center gap-2.5"
+                    style={{
+                      color: selectedVoice === v.id ? "white" : "var(--text-secondary)",
+                      background: selectedVoice === v.id ? "rgba(139,92,246,0.2)" : "transparent",
+                    }}
+                    onMouseEnter={(e) => { if (selectedVoice !== v.id) e.currentTarget.style.background = "var(--bg-hover)"; }}
+                    onMouseLeave={(e) => { if (selectedVoice !== v.id) e.currentTarget.style.background = "transparent"; }}
+                  >
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: v.color + "30" }}>
+                      <span className="material-symbols-rounded" style={{ fontSize: "14px", color: v.color }}>graphic_eq</span>
+                    </div>
+                    <div>
+                      <div className="font-semibold" style={{ color: "var(--text-primary)" }}>{v.name}</div>
+                      <div style={{ color: "var(--text-muted)", fontSize: "10px" }}>{v.desc}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
           )}
         </div>
       )}
