@@ -885,6 +885,7 @@ async def _poll_v2_task_to_completion(nano, task_id: str, job_id: int, user_id: 
                     await update_job(
                         job_id, status="completed", progress_percent=100,
                         temp_video_url=media_url, media_id=media_id,
+                        account_id=account["account_id"],
                         finished_at=datetime.utcnow(),
                     )
                     await publish_progress(user_id, job_id, {
@@ -953,16 +954,33 @@ async def _poll_v2_i2v_task(nano, task_id: str, job_id: int, user_id: int, proje
                 if not media_url:
                     media_url = _find_url_in_data(result) or ""
                 if media_url:
+                    v2_project_id = ""
+                    if isinstance(data, dict):
+                        v2_project_id = data.get("projectId") or data.get("project_id") or ""
+                    final_pid = v2_project_id or project_id
                     logger.info(f"🎉 I2V Job {job_id} done! URL={media_url[:80]}")
                     await update_job(
                         job_id, status="completed", progress_percent=100,
                         temp_video_url=media_url, media_id=media_id,
+                        account_id=account["account_id"],
                         finished_at=datetime.utcnow(),
                     )
                     await publish_progress(user_id, job_id, {
                         "type": "completed", "status": "completed",
                         "progress_percent": 100, "video_url": media_url, "media_id": media_id,
                     })
+                    # Save mediaId + projectId for upscale
+                    async with async_session_factory() as s:
+                        j = (await s.execute(select(GenerationJob).where(GenerationJob.id == job_id))).scalar_one_or_none()
+                        if j:
+                            p = dict(j.params or {})
+                            if media_id:
+                                p["nanoai_media_id"] = media_id
+                            if final_pid:
+                                p["project_id"] = final_pid
+                                p["nanoai_project_id"] = final_pid
+                            j.params = p
+                            await s.commit()
                     await complete_job(job_id, user_id)
                     return "ok"
                 return "ok"

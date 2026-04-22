@@ -381,8 +381,16 @@ async def upscale_video(
             else:
                 logger.error(f"🔴 Original account {job.account_id} not found or has no token")
 
+    # Fallback: if no original account (old video / missing account_id), try any available account
     if not account:
-        raise HTTPException(status_code=400, detail="Không tìm được account gốc đã tạo video — không thể upscale")
+        logger.warning(f"⚠️ No original account for job {job_id} — trying fallback with any available account")
+        fallback_acc = await get_account_token()
+        if fallback_acc:
+            account = fallback_acc
+            logger.info(f"🔄 Fallback account for upscale: {account['email']}")
+
+    if not account:
+        raise HTTPException(status_code=400, detail="Không tìm được account nào có token — không thể upscale")
 
     # ★ Get projectId — prioritize saved project_id (from video creation) over flow_project_url
     # Video may have been created in a different project than flow_project_url
