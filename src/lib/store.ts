@@ -96,6 +96,20 @@ interface AppStore {
   setNumberOfOutputs: (v: number) => void;
   mediaTab: "video" | "image";
   setMediaTab: (v: "video" | "image") => void;
+  videoSubTab: "components" | "keyframes";
+  setVideoSubTab: (v: "components" | "keyframes") => void;
+  videoDuration: "4" | "6" | "8";
+  setVideoDuration: (v: "4" | "6" | "8") => void;
+  selectedVoice: string | null;
+  setSelectedVoice: (v: string | null) => void;
+  startImageId: string | null;
+  setStartImageId: (v: string | null) => void;
+  startImageUrl: string | null;
+  setStartImageUrl: (v: string | null) => void;
+  endImageId: string | null;
+  setEndImageId: (v: string | null) => void;
+  endImageUrl: string | null;
+  setEndImageUrl: (v: string | null) => void;
 
   // Queue info
   queueCount: number;
@@ -187,6 +201,20 @@ export const useStore = create<AppStore>((set, get) => ({
   setNumberOfOutputs: (v) => set({ numberOfOutputs: v }),
   mediaTab: "video",
   setMediaTab: (v) => set({ mediaTab: v }),
+  videoSubTab: "components",
+  setVideoSubTab: (v) => set({ videoSubTab: v }),
+  videoDuration: "8",
+  setVideoDuration: (v) => set({ videoDuration: v }),
+  selectedVoice: null,
+  setSelectedVoice: (v) => set({ selectedVoice: v }),
+  startImageId: null,
+  setStartImageId: (v) => set({ startImageId: v }),
+  startImageUrl: null,
+  setStartImageUrl: (v) => set({ startImageUrl: v }),
+  endImageId: null,
+  setEndImageId: (v) => set({ endImageId: v }),
+  endImageUrl: null,
+  setEndImageUrl: (v) => set({ endImageUrl: v }),
 
   // ── Queue ──
   queueCount: 0,

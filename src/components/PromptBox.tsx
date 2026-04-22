@@ -48,6 +48,7 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
   const [creditCosts, setCreditCosts] = useState({ video: 1, image: 1 });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageUploadRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   // Fetch credit costs from admin settings
@@ -72,6 +73,19 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
   const addActiveJob = useStore((s) => s.addActiveJob);
   const showToast = useStore((s) => s.showToast);
   const setUser = useStore((s) => s.setUser);
+  const videoDuration = useStore((s) => s.videoDuration);
+  const videoSubTab = useStore((s) => s.videoSubTab);
+  const startImageId = useStore((s) => s.startImageId);
+  const startImageUrl = useStore((s) => s.startImageUrl);
+  const setStartImageId = useStore((s) => s.setStartImageId);
+  const setStartImageUrl = useStore((s) => s.setStartImageUrl);
+  const endImageId = useStore((s) => s.endImageId);
+  const endImageUrl = useStore((s) => s.endImageUrl);
+  const setEndImageId = useStore((s) => s.setEndImageId);
+  const setEndImageUrl = useStore((s) => s.setEndImageUrl);
+  const selectedVoice = useStore((s) => s.selectedVoice);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [activeFrame, setActiveFrame] = useState<"start" | "end">("start");
 
   const isVideo = mediaTab === "video";
   const currentModel = isVideo
@@ -104,6 +118,9 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
         aspect_ratio: aspectRatio,
         number_of_outputs: numberOfOutputs,
         video_model: modelKey,
+        ...(isVideo && startImageId ? { start_image_id: startImageId } : {}),
+        ...(isVideo ? { duration: videoDuration } : {}),
+        ...(isVideo && selectedVoice ? { voice: selectedVoice } : {}),
       });
 
       if (res.success) {
@@ -220,9 +237,120 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
   const bulkPrompts = parseBulkPrompts(bulkText);
   const bulkTotalCost = currentModel.price * numberOfOutputs * bulkPrompts.length;
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: "start" | "end" = "start") => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Chỉ hỗ trợ file ảnh", "error");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showToast("Ảnh quá lớn (tối đa 10MB)", "error");
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const token = localStorage.getItem("veo3_token");
+      const res = await fetch("/api/upload-image", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success && data.media_id) {
+        if (target === "start") {
+          setStartImageId(data.media_id);
+          setStartImageUrl(URL.createObjectURL(file));
+        } else {
+          setEndImageId(data.media_id);
+          setEndImageUrl(URL.createObjectURL(file));
+        }
+        showToast(`✅ Đã tải ảnh ${target === "start" ? "bắt đầu" : "kết thúc"} lên!`, "success");
+      } else {
+        showToast(data.detail || "Lỗi upload ảnh", "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Lỗi upload ảnh", "error");
+    } finally {
+      setUploadingImage(false);
+      if (imageUploadRef.current) imageUploadRef.current.value = "";
+    }
+  };
+
   return (
     <>
       <div className="flex flex-col gap-3 w-full fade-in" style={{ padding: "0 300px" }}>
+
+        {/* ═══ Keyframe UI (Khung hình mode) ═══ */}
+        {isVideo && videoSubTab === "keyframes" && (
+          <div className="flex items-center gap-3 px-4">
+            {/* Start frame */}
+            <div
+              className="relative rounded-xl overflow-hidden cursor-pointer group transition-all"
+              style={{
+                width: 80, height: 80,
+                border: activeFrame === "start" ? "2px solid var(--neon-blue)" : "2px solid var(--border-subtle)",
+                background: "var(--bg-tertiary)",
+              }}
+              onClick={() => { setActiveFrame("start"); imageUploadRef.current?.click(); }}
+            >
+              {startImageUrl ? (
+                <img src={startImageUrl} alt="Start" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center">
+                  <span className="material-symbols-rounded text-xl" style={{ color: "var(--text-muted)" }}>add_photo_alternate</span>
+                  <span className="text-[9px] font-medium" style={{ color: "var(--text-muted)" }}>Bắt đầu</span>
+                </div>
+              )}
+              {startImageUrl && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setStartImageId(null); setStartImageUrl(null); }}
+                  className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ background: "rgba(0,0,0,0.6)" }}
+                >
+                  <span className="material-symbols-rounded text-white" style={{ fontSize: "12px" }}>close</span>
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1">
+              <span className="material-symbols-rounded" style={{ color: "var(--text-muted)", fontSize: "18px" }}>swap_horiz</span>
+            </div>
+
+            {/* End frame */}
+            <div
+              className="relative rounded-xl overflow-hidden cursor-pointer group transition-all"
+              style={{
+                width: 80, height: 80,
+                border: activeFrame === "end" ? "2px solid var(--neon-purple)" : "2px solid var(--border-subtle)",
+                background: "var(--bg-tertiary)",
+              }}
+              onClick={() => { setActiveFrame("end"); imageUploadRef.current?.click(); }}
+            >
+              {endImageUrl ? (
+                <img src={endImageUrl} alt="End" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center">
+                  <span className="material-symbols-rounded text-xl" style={{ color: "var(--text-muted)" }}>add_photo_alternate</span>
+                  <span className="text-[9px] font-medium" style={{ color: "var(--text-muted)" }}>Kết thúc</span>
+                </div>
+              )}
+              {endImageUrl && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setEndImageId(null); setEndImageUrl(null); }}
+                  className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ background: "rgba(0,0,0,0.6)" }}
+                >
+                  <span className="material-symbols-rounded text-white" style={{ fontSize: "12px" }}>close</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ═══ Main prompt area ═══ */}
         <div className="px-4 py-3"
           style={{
@@ -232,6 +360,24 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
             backdropFilter: "blur(16px)",
             borderRadius: "30px",
           }}>
+
+          {/* Image preview (if uploaded in Components mode) */}
+          {isVideo && videoSubTab === "components" && startImageUrl && (
+            <div className="flex items-center gap-2 mb-2 pb-2" style={{ borderBottom: "1px solid var(--prompt-border)" }}>
+              <div className="relative rounded-lg overflow-hidden" style={{ width: 48, height: 48 }}>
+                <img src={startImageUrl} alt="Ref" className="w-full h-full object-cover" />
+                <button
+                  onClick={() => { setStartImageId(null); setStartImageUrl(null); }}
+                  className="absolute top-0 right-0 w-4 h-4 rounded-full flex items-center justify-center"
+                  style={{ background: "rgba(0,0,0,0.6)" }}
+                >
+                  <span className="material-symbols-rounded text-white" style={{ fontSize: "10px" }}>close</span>
+                </button>
+              </div>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>Ảnh tham chiếu đã tải lên</span>
+            </div>
+          )}
+
           {/* Header row with textarea and button */}
           <div className="flex items-end gap-3">
             <div className="flex-1 min-w-0">
@@ -246,8 +392,8 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
                 }}
                 onKeyDown={handleKeyDown}
                 placeholder={isVideo
-                  ? "Mô tả video bạn muốn tạo... (Enter để tạo, Shift+Enter xuống dòng)"
-                  : "Mô tả hình ảnh bạn muốn tạo... (Enter để tạo, Shift+Enter xuống dòng)"}
+                  ? "Bạn muốn tạo gì?"
+                  : "Mô tả hình ảnh bạn muốn tạo..."}
                 rows={1}
                 className="w-full bg-transparent resize-none outline-none text-[14px] leading-relaxed placeholder:text-[var(--prompt-placeholder)]"
                 style={{ color: "var(--prompt-text)", minHeight: "36px", maxHeight: "120px" }}
@@ -256,6 +402,29 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
             </div>
             {/* Quick actions */}
             <div className="flex items-center gap-1.5 shrink-0">
+              {/* Upload image (+) button */}
+              <input
+                ref={imageUploadRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleImageUpload(e, activeFrame)}
+              />
+              {isVideo && (
+                <button
+                  onClick={() => { setActiveFrame("start"); imageUploadRef.current?.click(); }}
+                  className="btn-ghost !p-1.5 !rounded-lg"
+                  title="Tải ảnh tham chiếu"
+                  style={{ color: uploadingImage ? "var(--text-muted)" : "var(--text-secondary)" }}
+                  disabled={uploadingImage}
+                >
+                  {uploadingImage ? (
+                    <span className="spinner !w-4 !h-4 !border-current/20 !border-t-current"></span>
+                  ) : (
+                    <span className="material-symbols-rounded text-lg">add</span>
+                  )}
+                </button>
+              )}
               <button
                 onClick={() => setPrompt(magicPrompts[Math.floor(Math.random() * magicPrompts.length)])}
                 className="btn-ghost !p-1.5 !rounded-lg"
@@ -286,7 +455,7 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
                 ) : (
                   <>
                     <span className="material-symbols-rounded text-lg">play_arrow</span>
-                    {isVideo ? "Generate" : "Generate"}
+                    Generate
                   </>
                 )}
               </button>
@@ -295,7 +464,9 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
           {/* Info bar */}
           <div className="flex items-center gap-3 mt-2 pt-2" style={{ borderTop: "1px solid var(--prompt-border)" }}>
             <span className="text-xs" style={{ color: "var(--prompt-placeholder)" }}>
-              {currentModel.label} · {aspectRatio} · x{numberOfOutputs}
+              {isVideo ? `Video · ${videoDuration}s` : currentModel.label} · {aspectRatio} · x{numberOfOutputs}
+              {startImageId ? " · 📷 Ảnh" : ""}
+              {selectedVoice ? " · 🎙️" : ""}
             </span>
             <span className="badge badge-neon !text-[10px]">{(creditPerItem * numberOfOutputs)} credits</span>
           </div>

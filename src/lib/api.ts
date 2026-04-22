@@ -86,6 +86,9 @@ export const api = {
     number_of_outputs?: number;
     video_model?: string;
     resolution?: string;
+    start_image_id?: string;
+    duration?: string;
+    voice?: string;
   }) => request("/api/generate", { method: "POST", body: data }),
 
   // ── Generate (bulk) ──

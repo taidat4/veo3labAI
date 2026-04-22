@@ -75,6 +75,9 @@ async def _create_jobs(
     resolution: str,
     db: AsyncSession,
     redis,
+    start_image_id: str | None = None,
+    duration: str | None = None,
+    voice: str | None = None,
 ) -> GenerateResponse:
     """Internal: Create jobs from prompt list, handle pricing + queue"""
     from app.models import SystemSetting
@@ -162,6 +165,15 @@ async def _create_jobs(
                     "video_model": model_key,
                     "media_type": media_type,
                     "number_of_outputs": 1,
+                    **({
+                        "start_image_id": start_image_id,
+                    } if start_image_id else {}),
+                    **({
+                        "duration": duration,
+                    } if duration else {}),
+                    **({
+                        "voice": voice,
+                    } if voice else {}),
                 },
                 model_key=flow_model_key,
                 batch_id=batch_id,
@@ -262,6 +274,9 @@ async def create_generation(
         number_of_outputs=req.number_of_outputs,
         model_key=model_key,
         resolution=req.resolution,
+        start_image_id=req.start_image_id,
+        duration=req.duration,
+        voice=req.voice,
         db=db,
         redis=redis,
     )

@@ -599,9 +599,20 @@ async def _process_via_nanoai(
     Generate via NanoAI proxy — 2 phase approach:
       Phase 1: NanoAI create-flow → taskId → poll NanoAI task-status → Google raw response
       Phase 2: Extract operation.name from Google response → poll Google → video URL
+    Supports both text-to-video and image-to-video (when start_image_id present in job params).
     """
-    from app.nanoai_client import get_nanoai_client, build_nanoai_body
+    from app.nanoai_client import get_nanoai_client, build_nanoai_body, build_nanoai_i2v_body
     from app.veo_template import VIDEO_MODEL_MAP
+
+    # Check if this is an image-to-video job
+    start_image_id = None
+    async with async_session_factory() as session:
+        job_result = await session.execute(
+            select(GenerationJob).where(GenerationJob.id == job_id)
+        )
+        job_obj = job_result.scalar_one_or_none()
+        if job_obj and job_obj.params:
+            start_image_id = job_obj.params.get("start_image_id")
 
     MAX_RETRIES = 1
     tried_emails = []
@@ -620,16 +631,28 @@ async def _process_via_nanoai(
                 project_id = flow_url.split("/project/")[-1].split("?")[0].split("/")[0]
                 logger.info(f"📁 Using project ID: {project_id}")
             else:
-                logger.info(f"ℹ️ Account {account['email']} has no project_id — NanoAI will use default")
+                logger.info(f"ℹ️ Account #{account.get('account_id', '?')} has no project_id — NanoAI will use default")
 
             flow_model = VIDEO_MODEL_MAP.get(video_model, "veo_3_1_t2v_lite_low_priority")
 
-            body = build_nanoai_body(
-                prompt=prompt,
-                aspect_ratio=aspect_ratio,
-                video_model=flow_model,
-                project_id=project_id,
-            )
+            # Build body: text-to-video or image-to-video
+            if start_image_id:
+                i2v_model = "veo_3_1_i2v_s_fast_ultra"
+                body = build_nanoai_i2v_body(
+                    prompt=prompt,
+                    start_image_id=start_image_id,
+                    aspect_ratio=aspect_ratio,
+                    video_model=i2v_model,
+                    project_id=project_id,
+                )
+                logger.info(f"🖼️→🎬 Image-to-Video: imageId={start_image_id[:20]}..., model={i2v_model}")
+            else:
+                body = build_nanoai_body(
+                    prompt=prompt,
+                    aspect_ratio=aspect_ratio,
+                    video_model=flow_model,
+                    project_id=project_id,
+                )
 
             logger.info(f"🚀 NanoAI: account={account['email']}, model={flow_model}, attempt {attempt+1}")
             await update_job(job_id, status="processing", account_id=account["account_id"])
@@ -656,9 +679,12 @@ async def _process_via_nanoai(
             # NanoAI handles EVERYTHING (no direct Google calls)
             # ══════════════════════════════════════════════════════
             nano = get_nanoai_client()
+            # Use different Google endpoint for image-to-video
+            i2v_flow_url = "https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartImage" if start_image_id else ""
             create_result = await nano.create_flow(
                 flow_auth_token=account["token"],
                 body_json=body,
+                flow_url=i2v_flow_url,
             )
 
             if "error" in create_result and not create_result.get("success"):

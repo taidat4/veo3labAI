@@ -506,6 +506,55 @@ def build_nanoai_body(
     }
 
 
+def build_nanoai_i2v_body(
+    prompt: str,
+    start_image_id: str,
+    aspect_ratio: str = "16:9",
+    video_model: str = "veo_3_1_i2v_s_fast_ultra",
+    project_id: str = "",
+    seed: Optional[int] = None,
+) -> dict:
+    """Build body_json for Image-to-Video (batchAsyncGenerateVideoStartImage)."""
+    import random
+
+    if seed is None:
+        seed = random.randint(1000, 99999)
+
+    ar_map = {
+        "16:9": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        "9:16": "VIDEO_ASPECT_RATIO_PORTRAIT",
+        "1:1": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        "4:3": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        "3:4": "VIDEO_ASPECT_RATIO_PORTRAIT",
+    }
+
+    return {
+        "clientContext": {
+            "recaptchaToken": "",
+            "sessionId": f";{int(time.time() * 1000)}",
+            "projectId": project_id,
+            "tool": "PINHOLE",
+            "userPaygateTier": "PAYGATE_TIER_TWO",
+        },
+        "requests": [
+            {
+                "aspectRatio": ar_map.get(aspect_ratio, "VIDEO_ASPECT_RATIO_LANDSCAPE"),
+                "seed": seed,
+                "textInput": {
+                    "prompt": prompt,
+                },
+                "videoModelKey": video_model,
+                "startImage": {
+                    "mediaId": start_image_id,
+                },
+                "metadata": {
+                    "sceneId": str(uuid.uuid4()),
+                },
+            }
+        ],
+    }
+
+
 def build_nanoai_upscale_body(
     media_generation_id: str,
     aspect_ratio: str = "16:9",

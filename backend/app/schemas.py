@@ -70,6 +70,9 @@ class GenerateRequest(BaseModel):
     number_of_outputs: int = Field(default=1, ge=1, le=4)
     video_model: MediaModel = MediaModel.VEO31_FAST
     resolution: str = Field(default="720", pattern="^(720|1080|4k)$")
+    start_image_id: Optional[str] = None  # mediaId for image-to-video
+    duration: Optional[str] = None  # "4" | "6" | "8"
+    voice: Optional[str] = None  # voice ID for Thành phần
 
 
 class BulkGenerateRequest(BaseModel):

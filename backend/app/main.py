@@ -192,6 +192,10 @@ app.include_router(public_api_router)
 from app.routes.deposit import router as deposit_router
 app.include_router(deposit_router)
 
+# ── Upload (Image-to-Video) ──
+from app.routes.upload import router as upload_router
+app.include_router(upload_router)
+
 # ── Static files (upscaled videos) ──
 import os
 from fastapi.staticfiles import StaticFiles

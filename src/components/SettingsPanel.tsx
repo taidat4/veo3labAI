@@ -1,20 +1,35 @@
 /**
- * SettingsPanel — LEFT sidebar settings (giống "CẤU HÌNH CHUNG" trong ảnh mẫu)
+ * SettingsPanel — LEFT sidebar settings
  * Contains:
  *   - Image/Video mode toggle
+ *   - Khung hình / Thành phần sub-tabs (Video mode)
  *   - Model selection dropdown
- *   - Aspect ratio dropdown
- *   - Number of outputs (1-4)
- *   - Delay giữa các task
- *   - Auto download toggle
- *   - Queue slot counter (X/8)
+ *   - Aspect ratio selector
+ *   - Number of outputs (x1-x4)
+ *   - Duration selector (4s/6s/8s)
+ *   - Voice selector (Thành phần tab)
+ *   - Queue slot counter
  *   - Account info
  */
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import { VIDEO_MODELS, IMAGE_MODELS, VIDEO_ASPECTS, IMAGE_ASPECTS } from "./PromptBox";
+
+// Voice list from Google Flow Labs
+const VOICES = [
+  { id: "achernar", name: "Achernar", desc: "Female, soft, high pitch", color: "#8b5cf6" },
+  { id: "achird", name: "Achird", desc: "Male, friendly, mid pitch", color: "#6366f1" },
+  { id: "algenib", name: "Algenib", desc: "Male, gravelly, low pitch", color: "#84cc16" },
+  { id: "algieba", name: "Algieba", desc: "Male, easy-going, mid-low pitch", color: "#a3e635" },
+  { id: "alnilam", name: "Alnilam", desc: "Male, firm, mid-low pitch", color: "#facc15" },
+  { id: "canopus", name: "Canopus", desc: "Male, warm, mid pitch", color: "#fb923c" },
+  { id: "capella", name: "Capella", desc: "Female, bright, high pitch", color: "#f472b6" },
+  { id: "denali", name: "Denali", desc: "Male, deep, low pitch", color: "#22d3ee" },
+  { id: "erinome", name: "Erinome", desc: "Female, calm, mid pitch", color: "#a78bfa" },
+  { id: "fomalhaut", name: "Fomalhaut", desc: "Male, authoritative, mid pitch", color: "#34d399" },
+];
 
 export function SettingsPanel() {
   const mediaTab = useStore((s) => s.mediaTab);
@@ -30,27 +45,32 @@ export function SettingsPanel() {
 
   const imageModel = useStore((s) => s.imageModel);
   const setImageModel = useStore((s) => s.setImageModel);
-  const [delay, setDelay] = useState(0);
-  const [autoDownload, setAutoDownload] = useState(false);
-  const [outputPath, setOutputPath] = useState(() => {
-    if (typeof window !== 'undefined') return localStorage.getItem('veo3_output_path') || '';
-    return '';
-  });
+  const videoSubTab = useStore((s) => s.videoSubTab);
+  const setVideoSubTab = useStore((s) => s.setVideoSubTab);
+  const videoDuration = useStore((s) => s.videoDuration);
+  const setVideoDuration = useStore((s) => s.setVideoDuration);
+  const selectedVoice = useStore((s) => s.selectedVoice);
+  const setSelectedVoice = useStore((s) => s.setSelectedVoice);
+
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [show4kTooltip, setShow4kTooltip] = useState(false);
+  const [showVoicePanel, setShowVoicePanel] = useState(false);
+  const [queueStatus, setQueueStatus] = useState<{ active: number; max: number; waiting: number }>({ active: 0, max: 8, waiting: 0 });
+  const [creditCosts, setCreditCosts] = useState({ video: 1, image: 1 });
   const [autoUpscale, setAutoUpscale] = useState(() => {
     if (typeof window !== 'undefined') return localStorage.getItem('veo3_auto_upscale') || 'none';
     return 'none';
   });
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [show4kTooltip, setShow4kTooltip] = useState(false);
-  const [queueStatus, setQueueStatus] = useState<{ active: number; max: number; waiting: number }>({ active: 0, max: 8, waiting: 0 });
-  const [creditCosts, setCreditCosts] = useState({ video: 1, image: 1 });
+  const [outputPath, setOutputPath] = useState(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('veo3_output_path') || '';
+    return '';
+  });
 
   const isVideo = mediaTab === "video";
   const currentModels = isVideo ? VIDEO_MODELS : IMAGE_MODELS;
   const currentAspects = isVideo ? VIDEO_ASPECTS : IMAGE_ASPECTS;
   const currentModelKey = isVideo ? videoModel : imageModel;
   const currentModel = currentModels.find((m) => m.key === currentModelKey) || currentModels[0];
-  const totalCost = currentModel.price * numberOfOutputs;
   const creditPerItem = isVideo ? creditCosts.video : creditCosts.image;
   const totalCredits = creditPerItem * numberOfOutputs;
 
@@ -84,19 +104,18 @@ export function SettingsPanel() {
     })();
   }, []);
 
-  // Always poll queue status to keep slot counter accurate
+  // Always poll queue status
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(fetchQueue, 5000);
     return () => clearInterval(interval);
   }, [user, fetchQueue]);
-  // Separate slot counts by media type
+
   const activeJobsArray = Array.from(activeJobs.values());
   const videoActive = activeJobsArray.filter((j) => (j.mediaType || "video") === "video").length;
   const imageActive = activeJobsArray.filter((j) => (j.mediaType || "video") === "image").length;
   const maxSlots = isVideo ? 8 : 10;
   const currentActive = isVideo ? videoActive : imageActive;
-
   const slotColor = currentActive >= maxSlots ? "var(--error)" :
                     currentActive >= maxSlots - 2 ? "var(--warning)" : "var(--success)";
 
@@ -152,6 +171,86 @@ export function SettingsPanel() {
         </div>
       </div>
 
+      {/* ═══ Video Sub-tabs: Khung hình / Thành phần ═══ */}
+      {isVideo && (
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
+            Chế độ:
+          </label>
+          <div className="flex rounded-lg overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }}>
+            <button
+              onClick={() => setVideoSubTab("keyframes")}
+              className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium transition-all"
+              style={{
+                background: videoSubTab === "keyframes" ? "var(--neon-blue)" : "transparent",
+                color: videoSubTab === "keyframes" ? "white" : "var(--text-muted)",
+              }}
+            >
+              <span className="material-symbols-rounded text-sm">view_carousel</span>
+              Khung hình
+            </button>
+            <button
+              onClick={() => setVideoSubTab("components")}
+              className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium transition-all"
+              style={{
+                background: videoSubTab === "components" ? "var(--neon-blue)" : "transparent",
+                color: videoSubTab === "components" ? "white" : "var(--text-muted)",
+              }}
+            >
+              <span className="material-symbols-rounded text-sm">dashboard_customize</span>
+              Thành phần
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Tỷ lệ (Aspect Ratio) ═══ */}
+      <div>
+        <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
+          Tỷ lệ:
+        </label>
+        <div className="grid grid-cols-2 gap-1.5">
+          {currentAspects.map((ar) => (
+            <button
+              key={ar.value}
+              onClick={() => setAspectRatio(ar.value)}
+              className="flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all"
+              style={{
+                background: aspectRatio === ar.value ? "var(--neon-blue)" : "var(--bg-tertiary)",
+                color: aspectRatio === ar.value ? "white" : "var(--text-secondary)",
+                border: `1px solid ${aspectRatio === ar.value ? "var(--neon-blue)" : "var(--border-subtle)"}`,
+              }}
+            >
+              <span className="material-symbols-rounded text-sm">{ar.icon}</span>
+              {ar.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ═══ Số ô kết quả (x1-x4) ═══ */}
+      <div>
+        <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
+          Số lượng:
+        </label>
+        <div className="grid grid-cols-4 gap-1.5">
+          {[1, 2, 3, 4].map((n) => (
+            <button
+              key={n}
+              onClick={() => setNumberOfOutputs(n)}
+              className="py-2 rounded-lg text-sm font-medium transition-all"
+              style={{
+                background: numberOfOutputs === n ? "var(--neon-blue)" : "var(--bg-tertiary)",
+                color: numberOfOutputs === n ? "white" : "var(--text-secondary)",
+                border: `1px solid ${numberOfOutputs === n ? "var(--neon-blue)" : "var(--border-subtle)"}`,
+              }}
+            >
+              x{n}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* ═══ Model ═══ */}
       <div>
         <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
@@ -179,62 +278,98 @@ export function SettingsPanel() {
         )}
       </div>
 
-      {/* ═══ Tỷ lệ (Aspect Ratio) ═══ */}
-      <div>
-        <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
-          Tỷ lệ:
-        </label>
-        <select
-          value={aspectRatio}
-          onChange={(e) => setAspectRatio(e.target.value)}
-          className="input-field !py-2 !text-sm cursor-pointer"
-          style={{ background: "var(--bg-input)" }}
-        >
-          {currentAspects.map((ar) => (
-            <option key={ar.value} value={ar.value}>
-              {ar.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* ═══ Delay giữa các task ═══ */}
-      <div>
-        <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
-          Delay giữa các task (s):
-        </label>
-        <input
-          type="number"
-          min={0}
-          max={60}
-          value={delay}
-          onChange={(e) => setDelay(Number(e.target.value))}
-          className="input-field !py-2 !text-sm"
-          style={{ background: "var(--bg-input)" }}
-        />
-      </div>
-
-      {/* ═══ Số ô kết quả ═══ */}
-      <div>
-        <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
-          Số ô kết quả (1-3):
-        </label>
-        <div className="grid grid-cols-3 gap-1.5">
-          {[1, 2, 3].map((n) => (
-            <button
-              key={n}
-              onClick={() => setNumberOfOutputs(n)}
-              className={`chip !px-0 !py-2 text-sm ${numberOfOutputs === n ? "chip-active" : ""}`}
-            >
-              x{n}
-            </button>
-          ))}
+      {/* ═══ Duration (4s / 6s / 8s) — Video only ═══ */}
+      {isVideo && (
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
+            Thời lượng:
+          </label>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(["4", "6", "8"] as const).map((d) => (
+              <button
+                key={d}
+                onClick={() => setVideoDuration(d)}
+                className="py-2 rounded-lg text-sm font-medium transition-all"
+                style={{
+                  background: videoDuration === d ? "var(--neon-blue)" : "var(--bg-tertiary)",
+                  color: videoDuration === d ? "white" : "var(--text-secondary)",
+                  border: `1px solid ${videoDuration === d ? "var(--neon-blue)" : "var(--border-subtle)"}`,
+                }}
+              >
+                {d}s
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
+      {/* ═══ Voice (Thành phần tab only) ═══ */}
+      {isVideo && videoSubTab === "components" && (
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
+            🎙️ Giọng nói:
+          </label>
+          <button
+            onClick={() => setShowVoicePanel(!showVoicePanel)}
+            className="w-full flex items-center justify-between py-2 px-3 rounded-lg text-xs font-medium transition-all"
+            style={{
+              background: selectedVoice ? "rgba(139,92,246,0.1)" : "var(--bg-tertiary)",
+              color: selectedVoice ? "#a78bfa" : "var(--text-secondary)",
+              border: `1px solid ${selectedVoice ? "#a78bfa" : "var(--border-subtle)"}`,
+            }}
+          >
+            <span className="flex items-center gap-2">
+              <span className="material-symbols-rounded text-sm">record_voice_over</span>
+              {selectedVoice ? VOICES.find(v => v.id === selectedVoice)?.name || selectedVoice : "Chọn giọng nói"}
+            </span>
+            <span className="material-symbols-rounded text-sm">{showVoicePanel ? "expand_less" : "expand_more"}</span>
+          </button>
 
+          {showVoicePanel && (
+            <div className="mt-2 rounded-lg overflow-hidden max-h-[250px] overflow-y-auto" style={{
+              background: "var(--bg-elevated)",
+              border: "1px solid var(--border-subtle)",
+            }}>
+              {/* Clear voice */}
+              {selectedVoice && (
+                <button
+                  onClick={() => { setSelectedVoice(null); setShowVoicePanel(false); }}
+                  className="w-full text-left px-3 py-2 text-xs transition-colors flex items-center gap-2"
+                  style={{ color: "var(--error)", borderBottom: "1px solid var(--border-subtle)" }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-hover)"}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                >
+                  <span className="material-symbols-rounded text-sm">close</span>
+                  Bỏ giọng nói
+                </button>
+              )}
+              {VOICES.map((v) => (
+                <button
+                  key={v.id}
+                  onClick={() => { setSelectedVoice(v.id); setShowVoicePanel(false); }}
+                  className="w-full text-left px-3 py-2.5 text-xs transition-colors flex items-center gap-2.5"
+                  style={{
+                    color: selectedVoice === v.id ? "white" : "var(--text-secondary)",
+                    background: selectedVoice === v.id ? "rgba(139,92,246,0.2)" : "transparent",
+                  }}
+                  onMouseEnter={(e) => { if (selectedVoice !== v.id) e.currentTarget.style.background = "var(--bg-hover)"; }}
+                  onMouseLeave={(e) => { if (selectedVoice !== v.id) e.currentTarget.style.background = "transparent"; }}
+                >
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: v.color + "30" }}>
+                    <span className="material-symbols-rounded" style={{ fontSize: "14px", color: v.color }}>graphic_eq</span>
+                  </div>
+                  <div>
+                    <div className="font-semibold" style={{ color: "var(--text-primary)" }}>{v.name}</div>
+                    <div style={{ color: "var(--text-muted)", fontSize: "10px" }}>{v.desc}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* ═══ Slot Counter (X/8) ═══ */}
+      {/* ═══ Slot Counter ═══ */}
       <div className="rounded-lg p-3" style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-subtle)" }}>
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
@@ -261,30 +396,6 @@ export function SettingsPanel() {
           </span>
         </div>
       </div>
-
-      {/* ═══ Output Folder ═══ */}
-      <div>
-        <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
-          📁 Thư mục tải xuống:
-        </label>
-        <input
-          type="text"
-          value={outputPath}
-          onChange={(e) => {
-            setOutputPath(e.target.value);
-            localStorage.setItem('veo3_output_path', e.target.value);
-          }}
-          placeholder="C:\Users\...\Downloads"
-          className="input-field !py-2 !text-sm"
-          style={{ background: "var(--bg-input)" }}
-        />
-        <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>
-          Đường dẫn lưu file khi auto tải xuống
-        </p>
-      </div>
-
-      {/* ═══ Separator ═══ */}
-      <div style={{ borderTop: "1px solid var(--border-subtle)" }} />
 
       {/* ═══ Account info ═══ */}
       {user && (
@@ -327,10 +438,7 @@ export function SettingsPanel() {
 
         {showAdvanced && (
           <>
-            {/* Backdrop */}
             <div className="fixed inset-0 z-40" onClick={() => setShowAdvanced(false)} />
-
-            {/* Popup */}
             <div className="absolute left-0 right-0 bottom-full mb-2 z-50 rounded-xl p-4 space-y-4" style={{
               background: "var(--bg-card-solid)",
               border: "1px solid var(--border-medium)",
@@ -345,7 +453,6 @@ export function SettingsPanel() {
                 </button>
               </div>
 
-              {/* Output path */}
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
                   Đường dẫn tải xuống:
@@ -362,7 +469,6 @@ export function SettingsPanel() {
                 />
               </div>
 
-              {/* Auto upscale */}
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
                   Auto Upscale khi tải:
@@ -405,15 +511,10 @@ export function SettingsPanel() {
                 )}
               </div>
 
-              {/* Confirm button */}
               <button
                 onClick={() => setShowAdvanced(false)}
                 className="w-full py-2 rounded-lg text-xs font-bold transition-all"
-                style={{
-                  background: "var(--neon-blue)",
-                  color: "white",
-                  border: "none",
-                }}
+                style={{ background: "var(--neon-blue)", color: "white", border: "none" }}
               >
                 ✓ Xác nhận
               </button>
