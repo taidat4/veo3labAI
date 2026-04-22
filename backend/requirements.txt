@@ -14,3 +14,4 @@ pyotp==2.9.0
 cryptography==46.0.6
 orjson==3.10.14
 websockets==14.2
+boto3==1.35.0

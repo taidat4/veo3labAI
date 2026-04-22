@@ -59,6 +59,21 @@ async def lifespan(app: FastAPI):
     # Auto-cleanup old upscaled video cache (files older than 24h)
     _cleanup_old_files()
 
+    # ── R2 Permanent Storage: cleanup + backfill ──
+    import asyncio
+    try:
+        from app.r2_storage import cleanup_old_media
+        deleted = await cleanup_old_media(max_age_days=30)
+        logger.info(f"[R2] Cleanup done: {deleted} old files removed (>30 days)")
+    except Exception as e:
+        logger.warning(f"[R2] Cleanup skipped: {e}")
+
+    # Start periodic R2 cleanup (every 24h)
+    asyncio.create_task(_r2_periodic_cleanup())
+
+    # Backfill: upload existing completed jobs that still have temp URLs
+    asyncio.create_task(_r2_backfill_existing())
+
     logger.info(f"[OK] Server ready at http://localhost:{settings.PORT}")
     logger.info(f"[DOCS] http://localhost:{settings.PORT}/docs")
 
@@ -109,6 +124,64 @@ def _cleanup_old_files():
         logger.info(f"[CLEANUP] Freed {total_cleaned / 1024 / 1024:.1f} MB of old cache files")
     else:
         logger.info("[CLEANUP] No old files to clean")
+
+async def _r2_periodic_cleanup():
+    """Run R2 cleanup every 24 hours in the background."""
+    import asyncio
+    while True:
+        await asyncio.sleep(24 * 3600)  # 24 hours
+        try:
+            from app.r2_storage import cleanup_old_media
+            deleted = await cleanup_old_media(max_age_days=30)
+            logger.info(f"[R2-CRON] Periodic cleanup: {deleted} files removed")
+        except Exception as e:
+            logger.warning(f"[R2-CRON] Cleanup error: {e}")
+
+
+async def _r2_backfill_existing():
+    """On startup, upload completed jobs with temp URLs (no R2) to R2."""
+    import asyncio
+    await asyncio.sleep(30)  # Wait for server to be fully up
+
+    try:
+        from app.database import async_session_factory
+        from app.models import GenerationJob
+        from sqlalchemy import select, and_
+        from app.r2_storage import save_media_permanently
+
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(GenerationJob).where(
+                    and_(
+                        GenerationJob.status == "completed",
+                        GenerationJob.temp_video_url.isnot(None),
+                        GenerationJob.r2_url.is_(None),
+                    )
+                ).order_by(GenerationJob.created_at.desc()).limit(50)
+            )
+            jobs = result.scalars().all()
+
+        if not jobs:
+            logger.info("[R2-BACKFILL] No jobs to backfill")
+            return
+
+        logger.info(f"[R2-BACKFILL] Found {len(jobs)} jobs without R2 URLs — starting backfill...")
+        
+        success_count = 0
+        for job in jobs:
+            try:
+                media_type = (job.params or {}).get("media_type", "video")
+                await save_media_permanently(job.id, job.temp_video_url, media_type, job.user_id)
+                success_count += 1
+                await asyncio.sleep(2)  # Rate limit
+            except Exception as e:
+                logger.warning(f"[R2-BACKFILL] Job #{job.id} failed: {e}")
+
+        logger.info(f"[R2-BACKFILL] Done: {success_count}/{len(jobs)} jobs uploaded to R2")
+
+    except Exception as e:
+        logger.warning(f"[R2-BACKFILL] Error: {e}")
+
 
 async def _auto_migrate():
     """Add new columns to existing tables (safe for SQLite)"""
