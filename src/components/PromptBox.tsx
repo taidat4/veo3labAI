@@ -354,7 +354,7 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
                   background: "var(--bg-tertiary)",
                   borderRadius: "14px",
                 }}
-                onClick={() => { setActiveFrame("start"); setTimeout(() => keyframeInputRef.current?.click(), 50); }}
+                onClick={() => { setActiveFrame("start"); setShowLibrary(true); }}
               >
                 {startImageUrl ? (
                   <img src={startImageUrl} alt="Start" className="w-full h-full object-cover" />
@@ -386,7 +386,7 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
                   background: "var(--bg-tertiary)",
                   borderRadius: "14px",
                 }}
-                onClick={() => { setActiveFrame("end"); setTimeout(() => keyframeInputRef.current?.click(), 50); }}
+                onClick={() => { setActiveFrame("end"); setShowLibrary(true); }}
               >
                 {endImageUrl ? (
                   <img src={endImageUrl} alt="End" className="w-full h-full object-cover" />

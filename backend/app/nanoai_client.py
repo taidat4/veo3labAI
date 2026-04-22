@@ -364,7 +364,7 @@ class NanoAIClient:
                     if isinstance(inner_result, dict):
                         full_data.update(inner_result)
                     # Top level fields (mediaId, fileUrl may be here)
-                    for key in ("mediaId", "fileUrl", "mediaUrl", "url", "imageUrl", "projectId"):
+                    for key in ("mediaId", "fileUrl", "fifeUrl", "mediaUrl", "url", "imageUrl", "projectId"):
                         if result.get(key) and not full_data.get(key):
                             full_data[key] = result[key]
                     return {"done": True, "status": "completed", "data": full_data}

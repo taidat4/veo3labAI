@@ -38,7 +38,7 @@ def _find_url_in_data(data, depth=0):
         return data
     if isinstance(data, dict):
         # Priority keys
-        for key in ("mediaUrl", "fileUrl", "url", "imageUrl", "downloadUrl", "download_url"):
+        for key in ("mediaUrl", "fileUrl", "fifeUrl", "url", "imageUrl", "downloadUrl", "download_url"):
             val = data.get(key)
             if isinstance(val, str) and val.startswith("https://"):
                 return val
@@ -2032,7 +2032,7 @@ async def _process_image_via_nanoai(
                         poll_result = await nano.poll_v2_task(task_id, max_polls=40, interval=3)
                         if poll_result and poll_result.get("status") == "completed":
                             data = poll_result.get("data", {})
-                            media_url = data.get("mediaUrl") or data.get("imageUrl") or data.get("fileUrl") or data.get("url") or ""
+                            media_url = data.get("mediaUrl") or data.get("imageUrl") or data.get("fileUrl") or data.get("fifeUrl") or data.get("url") or ""
                             if media_url:
                                 await update_job(
                                     job_id, status="completed", progress_percent=100,
@@ -2130,10 +2130,11 @@ async def _process_image_via_nanoai(
                 data = result["data"]
                 media_url = (
                     data.get("mediaUrl") or data.get("url") or data.get("imageUrl") or
-                    data.get("fileUrl") or
+                    data.get("fileUrl") or data.get("fifeUrl") or
                     (data.get("result", {}) or {}).get("mediaUrl") or
                     (data.get("result", {}) or {}).get("url") or
-                    (data.get("result", {}) or {}).get("fileUrl") or ""
+                    (data.get("result", {}) or {}).get("fileUrl") or
+                    (data.get("result", {}) or {}).get("fifeUrl") or ""
                 )
                 media_id = data.get("mediaId") or data.get("id") or ""
                 if media_url:
@@ -2177,13 +2178,14 @@ async def _process_image_via_nanoai(
                 # NanoAI can return URL in multiple locations
                 media_url = (
                     data.get("mediaUrl") or data.get("url") or
-                    data.get("imageUrl") or data.get("fileUrl") or
+                    data.get("imageUrl") or data.get("fileUrl") or data.get("fifeUrl") or
                     data.get("download_url") or data.get("downloadUrl") or
                     # Sometimes nested in result
                     (data.get("result", {}) or {}).get("mediaUrl") or
                     (data.get("result", {}) or {}).get("url") or
                     (data.get("result", {}) or {}).get("imageUrl") or
                     (data.get("result", {}) or {}).get("fileUrl") or
+                    (data.get("result", {}) or {}).get("fifeUrl") or
                     ""
                 )
 
