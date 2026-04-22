@@ -669,6 +669,69 @@ async def _poll_v2_task_to_completion(nano, task_id: str, job_id: int, user_id: 
 
     await fail_job(job_id, user_id, "V2 task timeout — quá 10 phút")
 
+
+async def _poll_v2_i2v_task(nano, task_id: str, job_id: int, user_id: int, project_id: str, account: dict) -> str:
+    """Poll NanoAI V2 I2V task. Returns 'upload_error' if image upload failed (for fallback to T2V)."""
+    MAX_POLLS = 15  # Quick check — I2V upload errors come fast (~2-6s)
+    for i in range(MAX_POLLS):
+        await asyncio.sleep(2)
+        try:
+            result = await nano.get_v2_task_status(task_id)
+            code = result.get("code", "")
+            success = result.get("success", False)
+
+            if not success and code == "processing":
+                progress = min(5 + i * 3, 40)
+                await update_job(job_id, progress_percent=progress, status="processing")
+                await publish_progress(user_id, job_id, {
+                    "type": "progress", "status": "processing", "progress_percent": progress,
+                })
+                continue
+
+            if success:
+                # I2V actually worked! Complete the job
+                data = result.get("data", {}) or {}
+                media_url = ""
+                media_id = ""
+                if isinstance(data, dict):
+                    media_url = data.get("mediaUrl") or data.get("url") or ""
+                    media_id = data.get("mediaId") or data.get("media_id") or ""
+                if not media_url:
+                    media_url = _find_url_in_data(result) or ""
+                if media_url:
+                    logger.info(f"🎉 I2V Job {job_id} done! URL={media_url[:80]}")
+                    await update_job(
+                        job_id, status="completed", progress_percent=100,
+                        temp_video_url=media_url, media_id=media_id,
+                        finished_at=datetime.utcnow(),
+                    )
+                    await publish_progress(user_id, job_id, {
+                        "type": "completed", "status": "completed",
+                        "progress_percent": 100, "video_url": media_url, "media_id": media_id,
+                    })
+                    await complete_job(job_id, user_id)
+                    return "ok"
+                return "ok"
+
+            if code in ("error", "failed"):
+                err = result.get("message", code)
+                logger.error(f"🔴 V2 I2V task failed: {err}")
+                # Check if it's an upload error → return special string for fallback
+                if "upload" in err.lower():
+                    logger.warning(f"⚠️ I2V Upload error detected — will fallback to T2V")
+                    return "upload_error"
+                # Other errors — fail the job
+                await fail_job(job_id, user_id, str(err)[:200])
+                return "failed"
+
+        except Exception as e:
+            logger.error(f"⚠️ V2 I2V poll error: {e}")
+
+    # Timeout — still processing after 30s, likely succeeded but slow
+    # Delegate to full poll
+    await _poll_v2_task_to_completion(nano, task_id, job_id, user_id, project_id, account)
+    return "ok"
+
 async def _process_via_nanoai(
     job_id: int, user_id: int, prompt: str, aspect_ratio: str, video_model: str,
 ):
@@ -740,13 +803,20 @@ async def _process_via_nanoai(
                     if task_id_v2:
                         logger.info(f"⏳ V2 I2V taskId: {task_id_v2}")
                         await report_account_result(account["email"], True)
-                        # Delegate to V2 polling (reuse _process_via_nanoai_v2 polling logic)
-                        await _poll_v2_task_to_completion(nano, task_id_v2, job_id, user_id, project_id, account)
-                        return
+                        # Poll V2 task — if "Upload error", fallback to text-to-video
+                        poll_result = await _poll_v2_i2v_task(nano, task_id_v2, job_id, user_id, project_id, account)
+                        if poll_result == "upload_error":
+                            # ★ I2V failed — fallback to text-to-video
+                            logger.warning(f"⚠️ I2V Upload error — falling back to text-to-video for job {job_id}")
+                            start_image_id = None  # Clear so it goes through T2V path below
+                            # Don't return — fall through to T2V flow below
+                        else:
+                            return  # Success or other failure already handled
                     else:
                         logger.error(f"🔴 No V2 taskId: {str(create_result)[:300]}")
-                        await fail_job(job_id, user_id, "NanoAI V2 không trả taskId")
-                        return
+                        # Fallback to T2V
+                        logger.warning(f"⚠️ V2 I2V no taskId — falling back to text-to-video")
+                        start_image_id = None
                 else:
                     # Google mediaId → use flow proxy with startImage
                     i2v_model = "veo_3_1_i2v_s_fast_ultra"
@@ -1383,7 +1453,17 @@ async def process_image_job(
         flow_model = IMAGE_MODEL_MAP.get(image_model, "NARWHAL")
         nano_ar = IMAGE_AR_MAP.get(aspect_ratio, "IMAGE_ASPECT_RATIO_SQUARE")
 
-        await _process_image_via_nanoai(job_id, user_id, prompt, nano_ar, flow_model)
+        # Check if this job has a reference image
+        ref_image_url = None
+        async with async_session_factory() as session:
+            job_result = await session.execute(
+                select(GenerationJob).where(GenerationJob.id == job_id)
+            )
+            job_obj = job_result.scalar_one_or_none()
+            if job_obj and job_obj.params:
+                ref_image_url = job_obj.params.get("start_image_id")
+
+        await _process_image_via_nanoai(job_id, user_id, prompt, nano_ar, flow_model, ref_image_url=ref_image_url)
         return
 
     # ── Try accounts ──
@@ -1541,12 +1621,17 @@ async def process_image_job(
 
 async def _process_image_via_nanoai(
     job_id: int, user_id: int, prompt: str, aspect_ratio: str, image_model: str,
+    ref_image_url: str = None,
 ):
     """
     Image generation via NanoAI v2 API.
     POST /api/v2/images/create → taskId → poll /api/v2/task → mediaUrl
+    If ref_image_url is provided, it's passed as imageUrls for style/reference.
     """
     from app.nanoai_client import get_nanoai_client
+
+    if ref_image_url:
+        logger.info(f"🖼️+🎨 Image with reference: url={ref_image_url[:60]}...")
 
     MAX_RETRIES = 5
     tried_emails = []
@@ -1568,12 +1653,15 @@ async def _process_image_via_nanoai(
             await publish_progress(user_id, job_id, {"type": "progress", "status": "processing", "progress_percent": 15})
 
             nano = get_nanoai_client()
+            # Pass reference image URLs if available
+            image_urls = [ref_image_url] if ref_image_url else None
             result = await nano.create_image(
                 access_token=account["token"],
                 prompt=prompt,
                 aspect_ratio=aspect_ratio,
                 image_model=image_model,
                 cookie=account.get("cookies", ""),
+                image_urls=image_urls,
             )
 
             if result.get("error") and not result.get("success"):
