@@ -889,7 +889,9 @@ async def _process_via_nanoai(
                         project_id=project_id,
                     )
                     logger.info(f"🖼️→🎬 Image-to-Video (flow proxy): mediaId={start_image_id[:30]}..., model={i2v_model}")
-            else:
+
+            # ★ Fallback: if no start_image_id (or upload failed) → T2V body
+            if not start_image_id:
                 body = build_nanoai_body(
                     prompt=prompt,
                     aspect_ratio=aspect_ratio,
