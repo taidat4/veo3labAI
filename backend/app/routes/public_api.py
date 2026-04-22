@@ -64,18 +64,12 @@ async def api_generate(
     model_key = req.video_model.value if hasattr(req.video_model, 'value') else str(req.video_model)
     aspect = req.aspect_ratio.value if hasattr(req.aspect_ratio, 'value') else str(req.aspect_ratio)
 
-    # Price check
-    base_price = MODEL_PRICING.get(model_key, 5000)
-    total_cost = base_price * req.number_of_outputs
-    if user.balance < total_cost:
-        raise HTTPException(status_code=400, detail=f"Insufficient credits. Need {total_cost}, have {user.balance}")
-
     # Rate limit
     usage = await rate_limiter.get_user_usage(user.id)
     if usage >= 8:
         raise HTTPException(status_code=429, detail="Max concurrent jobs reached (8). Wait for current jobs to finish.")
 
-    # Delegate to main generate logic
+    # Delegate to main generate logic (handles pricing, credits, dispatch)
     from app.routes.generate import _create_jobs
     result = await _create_jobs(
         user=user,

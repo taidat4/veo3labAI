@@ -47,7 +47,7 @@ export default function DocsPage() {
           <div className="rounded-lg p-3 mb-5" style={{ background: "rgba(6,182,212,0.06)", border: "1px solid rgba(6,182,212,0.15)" }}>
             <p className="text-[11px] font-semibold mb-1" style={{ color: "#06b6d4" }}>🏗️ KIẾN TRÚC</p>
             <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-              Mọi request API đều đi qua <strong>veo3labai.com</strong> — server của chúng tôi xử lý toàn bộ yêu cầu, quản lý tài khoản và cân bằng tải tự động. Bạn không cần quan tâm đến backend, chỉ cần gọi API với API Key.
+              Mọi request API đều đi qua <strong>veo3labai.com</strong> — server xử lý toàn bộ yêu cầu, quản lý tài khoản và cân bằng tải tự động. Bạn chỉ cần gọi API với API Key.
             </p>
           </div>
 
@@ -59,7 +59,7 @@ export default function DocsPage() {
 {`X-API-Key: <YOUR_API_KEY>`}
             </pre>
             <p className="text-[10px] mt-2" style={{ color: "var(--text-muted)" }}>
-              API Key được tạo tự động khi đăng ký. Xem tại trang <strong>Hồ sơ</strong>.
+              API Key được tạo tự động khi đăng ký. Xem tại trang <strong>Hồ sơ</strong>. Có thể tạo lại key mới bất kỳ lúc nào.
             </p>
           </div>
 
@@ -70,11 +70,11 @@ export default function DocsPage() {
             <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }}>
               <div className="flex items-center gap-2 px-4 py-2.5" style={{ background: "var(--bg-tertiary)" }}>
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ background: "#22c55e", color: "white" }}>POST</span>
-                <code className="text-xs font-mono font-semibold" style={{ color: "var(--text-primary)" }}>/api/generate</code>
+                <code className="text-xs font-mono font-semibold" style={{ color: "var(--text-primary)" }}>/api/v1/generate</code>
                 <span className="text-[10px] ml-auto" style={{ color: "var(--text-muted)" }}>Tạo video</span>
               </div>
               <pre className="text-[11px] font-mono p-4 overflow-x-auto" style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}>
-{`curl -X POST https://veo3labai.com/api/generate \\
+{`curl -X POST https://veo3labai.com/api/v1/generate \\
   -H "X-API-Key: YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -82,7 +82,17 @@ export default function DocsPage() {
     "aspect_ratio": "16:9",
     "video_model": "veo31_fast_lp",
     "number_of_outputs": 1
-  }'`}
+  }'
+
+# Response:
+# {
+#   "success": true,
+#   "job_id": 123,
+#   "job_ids": [123],
+#   "cost": 1,
+#   "remaining_balance": 99,
+#   "message": "Đang xử lý 1 video..."
+# }`}
               </pre>
             </div>
 
@@ -90,45 +100,23 @@ export default function DocsPage() {
             <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }}>
               <div className="flex items-center gap-2 px-4 py-2.5" style={{ background: "var(--bg-tertiary)" }}>
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ background: "#22c55e", color: "white" }}>POST</span>
-                <code className="text-xs font-mono font-semibold" style={{ color: "var(--text-primary)" }}>/api/generate</code>
+                <code className="text-xs font-mono font-semibold" style={{ color: "var(--text-primary)" }}>/api/v1/generate</code>
                 <span className="text-[10px] ml-auto" style={{ color: "var(--text-muted)" }}>Tạo ảnh</span>
               </div>
               <pre className="text-[11px] font-mono p-4 overflow-x-auto" style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}>
-{`curl -X POST https://veo3labai.com/api/generate \\
+{`curl -X POST https://veo3labai.com/api/v1/generate \\
   -H "X-API-Key: YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "prompt": "A beautiful sunset over mountains",
     "video_model": "imagen_4",
-    "resolution": "1024x1024"
+    "aspect_ratio": "1:1",
+    "number_of_outputs": 1
   }'`}
               </pre>
             </div>
 
-            {/* 3. Bulk Generate */}
-            <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }}>
-              <div className="flex items-center gap-2 px-4 py-2.5" style={{ background: "var(--bg-tertiary)" }}>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ background: "#22c55e", color: "white" }}>POST</span>
-                <code className="text-xs font-mono font-semibold" style={{ color: "var(--text-primary)" }}>/api/generate/bulk</code>
-                <span className="text-[10px] ml-auto" style={{ color: "var(--text-muted)" }}>Tạo hàng loạt</span>
-              </div>
-              <pre className="text-[11px] font-mono p-4 overflow-x-auto" style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}>
-{`curl -X POST https://veo3labai.com/api/generate/bulk \\
-  -H "X-API-Key: YOUR_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "prompts": [
-      "Prompt 1...",
-      "Prompt 2...",
-      "Prompt 3..."
-    ],
-    "aspect_ratio": "16:9",
-    "video_model": "veo31_fast_lp"
-  }'`}
-              </pre>
-            </div>
-
-            {/* 4. Get Job Status */}
+            {/* 3. Get Job Status */}
             <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }}>
               <div className="flex items-center gap-2 px-4 py-2.5" style={{ background: "var(--bg-tertiary)" }}>
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ background: "#3b82f6", color: "white" }}>GET</span>
@@ -142,15 +130,21 @@ export default function DocsPage() {
 # Response:
 # {
 #   "id": 123,
-#   "status": "completed",  // pending | processing | completed | failed
+#   "status": "completed",  // queued | pending | processing | completed | failed
+#   "prompt": "A cat playing piano",
+#   "media_type": "video",
 #   "video_url": "https://...",
+#   "upscale_status": null,  // null | "processing" | "completed"
+#   "upscale_url": null,
 #   "cost": 1,
-#   "media_type": "video"
+#   "progress_percent": 100,
+#   "created_at": "2026-04-23T00:00:00",
+#   "finished_at": "2026-04-23T00:02:30"
 # }`}
               </pre>
             </div>
 
-            {/* 5. List Jobs */}
+            {/* 4. List Jobs */}
             <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }}>
               <div className="flex items-center gap-2 px-4 py-2.5" style={{ background: "var(--bg-tertiary)" }}>
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ background: "#3b82f6", color: "white" }}>GET</span>
@@ -159,21 +153,35 @@ export default function DocsPage() {
               </div>
               <pre className="text-[11px] font-mono p-4 overflow-x-auto" style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}>
 {`curl "https://veo3labai.com/api/v1/jobs?limit=50&offset=0" \\
-  -H "X-API-Key: YOUR_API_KEY"`}
+  -H "X-API-Key: YOUR_API_KEY"
+
+# Response:
+# {
+#   "jobs": [ ... ],
+#   "total": 42
+# }`}
               </pre>
             </div>
 
-            {/* 6. Download */}
+            {/* 5. Account Info */}
             <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }}>
               <div className="flex items-center gap-2 px-4 py-2.5" style={{ background: "var(--bg-tertiary)" }}>
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ background: "#3b82f6", color: "white" }}>GET</span>
-                <code className="text-xs font-mono font-semibold" style={{ color: "var(--text-primary)" }}>/api/download/{"{job_id}"}?quality=720</code>
-                <span className="text-[10px] ml-auto" style={{ color: "var(--text-muted)" }}>Tải video/ảnh</span>
+                <code className="text-xs font-mono font-semibold" style={{ color: "var(--text-primary)" }}>/api/v1/me</code>
+                <span className="text-[10px] ml-auto" style={{ color: "var(--text-muted)" }}>Thông tin tài khoản</span>
               </div>
               <pre className="text-[11px] font-mono p-4 overflow-x-auto" style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}>
-{`# quality: "720" (mặc định) hoặc "1080" (cần upscale trước)
-curl -o video.mp4 \\
-  "https://veo3labai.com/api/download/123?quality=720&token=YOUR_API_KEY"`}
+{`curl https://veo3labai.com/api/v1/me \\
+  -H "X-API-Key: YOUR_API_KEY"
+
+# Response:
+# {
+#   "user_id": 1,
+#   "username": "user123",
+#   "balance": 50000,
+#   "role": "user",
+#   "plan_id": null
+# }`}
               </pre>
             </div>
           </div>
@@ -188,7 +196,7 @@ curl -o video.mp4 \\
 {`const API_KEY = "YOUR_API_KEY";
 const BASE = "https://veo3labai.com";
 
-// Tạo video
+// 1. Tạo video
 const res = await fetch(\`\${BASE}/api/v1/generate\`, {
   method: "POST",
   headers: {
@@ -203,21 +211,26 @@ const res = await fetch(\`\${BASE}/api/v1/generate\`, {
 });
 const { job_id } = await res.json();
 
-// Kiểm tra trạng thái (polling)
-const check = async () => {
+// 2. Poll trạng thái (5-10s interval)
+const poll = async () => {
   const r = await fetch(\`\${BASE}/api/v1/jobs/\${job_id}\`, {
     headers: { "X-API-Key": API_KEY }
   });
   const job = await r.json();
+  
   if (job.status === "completed") {
-    console.log("Video URL:", job.video_url);
-  } else if (job.status === "failed") {
-    console.log("Error:", job.error);
-  } else {
-    setTimeout(check, 5000); // Thử lại sau 5s
+    console.log("✅ Video URL:", job.video_url);
+    return;
   }
+  if (job.status === "failed") {
+    console.log("❌ Error:", job.error);
+    return;
+  }
+  
+  console.log(\`⏳ \${job.progress_percent}% ...\`);
+  setTimeout(poll, 5000);
 };
-check();`}
+poll();`}
             </pre>
           </div>
 
@@ -236,10 +249,15 @@ check();`}
                 </thead>
                 <tbody>
                   {[
-                    { key: "veo31_fast_lp", type: "🎬 Video", desc: "Veo 3.1 Quality", credit: "1" },
+                    { key: "veo31_fast_lp", type: "🎬 Video", desc: "Veo 3.1 — Quality (Low Priority)", credit: "1" },
+                    { key: "veo31_fast", type: "🎬 Video", desc: "Veo 3.1 — Fast", credit: "1" },
+                    { key: "veo31_quality", type: "🎬 Video", desc: "Veo 3.1 — Quality", credit: "1" },
+                    { key: "veo31_lite", type: "🎬 Video", desc: "Veo 3.1 — Lite", credit: "1" },
+                    { key: "veo2_fast", type: "🎬 Video", desc: "Veo 2 — Fast", credit: "1" },
+                    { key: "veo2_quality", type: "🎬 Video", desc: "Veo 2 — Quality", credit: "1" },
+                    { key: "imagen_4", type: "🖼️ Image", desc: "Imagen 4 (cao cấp)", credit: "1" },
                     { key: "nano_banana_pro", type: "🖼️ Image", desc: "Nano Banana Pro", credit: "1" },
                     { key: "nano_banana_2", type: "🖼️ Image", desc: "Nano Banana 2", credit: "1" },
-                    { key: "imagen_4", type: "🖼️ Image", desc: "Imagen 4 (cao cấp)", credit: "1" },
                   ].map((m, i) => (
                     <tr key={i} style={{ borderTop: "1px solid var(--border-subtle)" }}>
                       <td className="px-4 py-2.5 font-mono font-semibold" style={{ color: "var(--neon-blue)" }}>{m.key}</td>
@@ -253,11 +271,57 @@ check();`}
             </div>
           </div>
 
+          {/* Parameters table */}
+          <div className="mt-6">
+            <p className="text-[11px] font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Parameters cho /generate</p>
+            <div className="overflow-x-auto rounded-lg" style={{ border: "1px solid var(--border-subtle)" }}>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr style={{ background: "var(--bg-tertiary)" }}>
+                    <th className="text-left px-4 py-2 font-semibold" style={{ color: "var(--text-muted)" }}>Field</th>
+                    <th className="text-left px-4 py-2 font-semibold" style={{ color: "var(--text-muted)" }}>Type</th>
+                    <th className="text-left px-4 py-2 font-semibold" style={{ color: "var(--text-muted)" }}>Mô tả</th>
+                    <th className="text-left px-4 py-2 font-semibold" style={{ color: "var(--text-muted)" }}>Default</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { field: "prompt", type: "string", desc: "Nội dung mô tả (bắt buộc)", def: "—" },
+                    { field: "video_model", type: "string", desc: "Model key (xem bảng trên)", def: "veo31_fast" },
+                    { field: "aspect_ratio", type: "string", desc: "16:9 | 9:16 | 1:1 | 4:3 | 3:4", def: "16:9" },
+                    { field: "number_of_outputs", type: "int", desc: "Số lượng (1-4)", def: "1" },
+                    { field: "resolution", type: "string", desc: "720 | 1080 | 4k", def: "720" },
+                    { field: "start_image_id", type: "string?", desc: "Image URL cho Image-to-Video", def: "null" },
+                    { field: "duration", type: "string?", desc: "Thời lượng video: 4 | 6 | 8", def: "null" },
+                  ].map((p, i) => (
+                    <tr key={i} style={{ borderTop: "1px solid var(--border-subtle)" }}>
+                      <td className="px-4 py-2.5 font-mono font-semibold" style={{ color: "var(--neon-blue)" }}>{p.field}</td>
+                      <td className="px-4 py-2.5 font-mono" style={{ color: "var(--text-muted)" }}>{p.type}</td>
+                      <td className="px-4 py-2.5" style={{ color: "var(--text-secondary)" }}>{p.desc}</td>
+                      <td className="px-4 py-2.5 font-mono" style={{ color: "var(--text-muted)" }}>{p.def}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Status flow */}
+          <div className="mt-6 rounded-lg p-3" style={{ background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.15)" }}>
+            <p className="text-[11px] font-semibold mb-2" style={{ color: "var(--neon-blue)" }}>📊 JOB STATUS FLOW</p>
+            <p className="text-xs font-mono" style={{ color: "var(--text-secondary)" }}>
+              queued → pending → processing → completed / failed
+            </p>
+            <p className="text-[10px] mt-2" style={{ color: "var(--text-muted)" }}>
+              Poll bằng <code>GET /api/v1/jobs/{"{job_id}"}</code> mỗi 5-10 giây. Video thường mất 1-3 phút, ảnh 10-30 giây.
+            </p>
+          </div>
+
           {/* Rate limits note */}
           <div className="mt-5 rounded-lg p-3" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)" }}>
             <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
               <span className="material-symbols-rounded text-xs align-middle mr-1" style={{ color: "#f59e0b" }}>warning</span>
-              <strong>Rate Limit:</strong> Tối đa 9 request đồng thời. Sử dụng polling (5-10s) để kiểm tra trạng thái job thay vì gửi request liên tục.
+              <strong>Rate Limit:</strong> Tối đa 8 job đồng thời. Jobs vượt quá sẽ tự động vào hàng chờ và chạy khi có slot trống.
             </p>
           </div>
         </div>
