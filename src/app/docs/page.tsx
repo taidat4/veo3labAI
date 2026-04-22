@@ -45,9 +45,9 @@ export default function DocsPage() {
 
           {/* Architecture note */}
           <div className="rounded-lg p-3 mb-5" style={{ background: "rgba(6,182,212,0.06)", border: "1px solid rgba(6,182,212,0.15)" }}>
-            <p className="text-[11px] font-semibold mb-1" style={{ color: "#06b6d4" }}>🏗️ KIẾN TRÚC</p>
+            <p className="text-[11px] font-semibold mb-1" style={{ color: "#06b6d4" }}>🏗️ CÁCH HOẠT ĐỘNG</p>
             <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-              Mọi request API đều đi qua <strong>veo3labai.com</strong> — server xử lý toàn bộ yêu cầu, quản lý tài khoản và cân bằng tải tự động. Bạn chỉ cần gọi API với API Key.
+              Bạn gửi yêu cầu qua API → <strong>Veo3Lab</strong> xử lý tạo video/ảnh → trả kết quả (URL) về cho tool/web của bạn. Mọi xử lý đều diễn ra trên server Veo3Lab, bạn chỉ cần gọi API và poll kết quả.
             </p>
           </div>
 
@@ -59,7 +59,7 @@ export default function DocsPage() {
 {`X-API-Key: <YOUR_API_KEY>`}
             </pre>
             <p className="text-[10px] mt-2" style={{ color: "var(--text-muted)" }}>
-              API Key được tạo tự động khi đăng ký. Xem tại trang <strong>Hồ sơ</strong>. Có thể tạo lại key mới bất kỳ lúc nào.
+              API Key được tạo tự động khi đăng ký. Xem và copy tại trang <strong>Hồ sơ</strong>.
             </p>
           </div>
 
@@ -78,7 +78,7 @@ export default function DocsPage() {
   -H "X-API-Key: YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "prompt": "A cat playing piano",
+    "prompt": "A cat playing piano in a jazz bar",
     "aspect_ratio": "16:9",
     "video_model": "veo31_fast_lp",
     "number_of_outputs": 1
@@ -130,12 +130,10 @@ export default function DocsPage() {
 # Response:
 # {
 #   "id": 123,
-#   "status": "completed",  // queued | pending | processing | completed | failed
+#   "status": "completed",
 #   "prompt": "A cat playing piano",
 #   "media_type": "video",
 #   "video_url": "https://...",
-#   "upscale_status": null,  // null | "processing" | "completed"
-#   "upscale_url": null,
 #   "cost": 1,
 #   "progress_percent": 100,
 #   "created_at": "2026-04-23T00:00:00",
@@ -157,7 +155,7 @@ export default function DocsPage() {
 
 # Response:
 # {
-#   "jobs": [ ... ],
+#   "jobs": [ { "id": 123, "status": "completed", "video_url": "...", ... } ],
 #   "total": 42
 # }`}
               </pre>
@@ -179,8 +177,7 @@ export default function DocsPage() {
 #   "user_id": 1,
 #   "username": "user123",
 #   "balance": 50000,
-#   "role": "user",
-#   "plan_id": null
+#   "role": "user"
 # }`}
               </pre>
             </div>
@@ -204,7 +201,7 @@ const res = await fetch(\`\${BASE}/api/v1/generate\`, {
     "Content-Type": "application/json"
   },
   body: JSON.stringify({
-    prompt: "A cat playing piano",
+    prompt: "A cat playing piano in a jazz bar",
     aspect_ratio: "16:9",
     video_model: "veo31_fast_lp"
   })
@@ -220,6 +217,7 @@ const poll = async () => {
   
   if (job.status === "completed") {
     console.log("✅ Video URL:", job.video_url);
+    // Dùng video_url này trong tool/web của bạn
     return;
   }
   if (job.status === "failed") {
@@ -249,12 +247,7 @@ poll();`}
                 </thead>
                 <tbody>
                   {[
-                    { key: "veo31_fast_lp", type: "🎬 Video", desc: "Veo 3.1 — Quality (Low Priority)", credit: "1" },
-                    { key: "veo31_fast", type: "🎬 Video", desc: "Veo 3.1 — Fast", credit: "1" },
-                    { key: "veo31_quality", type: "🎬 Video", desc: "Veo 3.1 — Quality", credit: "1" },
-                    { key: "veo31_lite", type: "🎬 Video", desc: "Veo 3.1 — Lite", credit: "1" },
-                    { key: "veo2_fast", type: "🎬 Video", desc: "Veo 2 — Fast", credit: "1" },
-                    { key: "veo2_quality", type: "🎬 Video", desc: "Veo 2 — Quality", credit: "1" },
+                    { key: "veo31_fast_lp", type: "🎬 Video", desc: "Veo 3.1 — Quality", credit: "1" },
                     { key: "imagen_4", type: "🖼️ Image", desc: "Imagen 4 (cao cấp)", credit: "1" },
                     { key: "nano_banana_pro", type: "🖼️ Image", desc: "Nano Banana Pro", credit: "1" },
                     { key: "nano_banana_2", type: "🖼️ Image", desc: "Nano Banana 2", credit: "1" },
@@ -287,10 +280,9 @@ poll();`}
                 <tbody>
                   {[
                     { field: "prompt", type: "string", desc: "Nội dung mô tả (bắt buộc)", def: "—" },
-                    { field: "video_model", type: "string", desc: "Model key (xem bảng trên)", def: "veo31_fast" },
+                    { field: "video_model", type: "string", desc: "Model key (xem bảng trên)", def: "veo31_fast_lp" },
                     { field: "aspect_ratio", type: "string", desc: "16:9 | 9:16 | 1:1 | 4:3 | 3:4", def: "16:9" },
                     { field: "number_of_outputs", type: "int", desc: "Số lượng (1-4)", def: "1" },
-                    { field: "resolution", type: "string", desc: "720 | 1080 | 4k", def: "720" },
                     { field: "start_image_id", type: "string?", desc: "Image URL cho Image-to-Video", def: "null" },
                     { field: "duration", type: "string?", desc: "Thời lượng video: 4 | 6 | 8", def: "null" },
                   ].map((p, i) => (
@@ -306,14 +298,27 @@ poll();`}
             </div>
           </div>
 
-          {/* Status flow */}
+          {/* Video output info */}
           <div className="mt-6 rounded-lg p-3" style={{ background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.15)" }}>
-            <p className="text-[11px] font-semibold mb-2" style={{ color: "var(--neon-blue)" }}>📊 JOB STATUS FLOW</p>
-            <p className="text-xs font-mono" style={{ color: "var(--text-secondary)" }}>
-              queued → pending → processing → completed / failed
-            </p>
+            <p className="text-[11px] font-semibold mb-2" style={{ color: "var(--neon-blue)" }}>📹 VIDEO OUTPUT</p>
+            <ul className="text-xs space-y-1" style={{ color: "var(--text-secondary)" }}>
+              <li>• <strong>Độ phân giải:</strong> 720p (mặc định), hỗ trợ upscale lên <strong>1080p</strong></li>
+              <li>• <strong>Thời lượng:</strong> 4s, 6s, hoặc 8s</li>
+              <li>• <strong>Format:</strong> MP4</li>
+              <li>• <strong>Tỉ lệ:</strong> 16:9 (ngang) hoặc 9:16 (dọc)</li>
+            </ul>
+          </div>
+
+          {/* Status flow */}
+          <div className="mt-5 rounded-lg p-3" style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.15)" }}>
+            <p className="text-[11px] font-semibold mb-2" style={{ color: "#22c55e" }}>📊 WORKFLOW</p>
+            <div className="text-xs space-y-1" style={{ color: "var(--text-secondary)" }}>
+              <p><strong>1.</strong> Gọi <code>POST /api/v1/generate</code> → nhận <code>job_id</code></p>
+              <p><strong>2.</strong> Poll <code>GET /api/v1/jobs/{"{job_id}"}</code> mỗi 5-10 giây</p>
+              <p><strong>3.</strong> Khi <code>status = &quot;completed&quot;</code> → lấy <code>video_url</code> để download hoặc hiển thị</p>
+            </div>
             <p className="text-[10px] mt-2" style={{ color: "var(--text-muted)" }}>
-              Poll bằng <code>GET /api/v1/jobs/{"{job_id}"}</code> mỗi 5-10 giây. Video thường mất 1-3 phút, ảnh 10-30 giây.
+              Status flow: queued → pending → processing → completed / failed. Video thường mất 1-3 phút, ảnh 10-30 giây.
             </p>
           </div>
 
