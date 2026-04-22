@@ -92,7 +92,7 @@ export function ProgressCircle({ percent, size = 80 }: { percent: number; size?:
 /**
  * ActiveJobCard — Job đang xử lý với progress circle
  */
-export function ActiveJobCard({ job }: { job: { id: number; prompt: string; status: string; progress: number; startedAt: number; mediaType?: string; error?: string } }) {
+export function ActiveJobCard({ job, index }: { job: { id: number; prompt: string; status: string; progress: number; startedAt: number; mediaType?: string; error?: string }; index?: number }) {
   const elapsed = Math.floor((Date.now() - job.startedAt) / 1000);
   const isImage = job.mediaType === "image";
   const isFailed = job.status === "failed";
@@ -142,7 +142,7 @@ export function ActiveJobCard({ job }: { job: { id: number; prompt: string; stat
           <div className="flex items-center gap-3 text-xs" style={{ color: "var(--text-muted)" }}>
             {!isFailed && <span>⏱ ~{mins}:{secs.toString().padStart(2, "0")} còn lại</span>}
             {!isFailed && <span>•</span>}
-            <span>Job #{job.id}</span>
+            <span>job #{index ?? job.id}</span>
           </div>
           {/* Progress bar — smooth CSS transition */}
           {!isFailed && (

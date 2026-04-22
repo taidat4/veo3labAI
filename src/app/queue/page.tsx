@@ -109,7 +109,7 @@ export default function QueuePage() {
                         {cfg.label}
                       </span>
                       <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                        Job #{job.id}
+                        Job #{index + 1}
                       </span>
                     </div>
                   </div>

@@ -244,8 +244,8 @@ export default function HomePage() {
                       </h2>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {filteredActive.map((job) => (
-                        <ActiveJobCard key={job.id} job={job} />
+                      {filteredActive.map((job, idx) => (
+                        <ActiveJobCard key={job.id} job={job} index={idx + 1} />
                       ))}
                     </div>
                   </div>
