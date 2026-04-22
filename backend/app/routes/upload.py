@@ -13,8 +13,10 @@ from app.auth import get_current_user
 logger = logging.getLogger("veo3.route.upload")
 router = APIRouter(prefix="/api", tags=["Upload"])
 
-# Upload directory — served as static files
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "uploads")
+# Upload directory — must match static mount in main.py
+# main.py: static_dir = backend/static/ (2 levels up from backend/app/main.py)
+# This file: backend/app/routes/upload.py → need 3 levels up to reach backend/
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
