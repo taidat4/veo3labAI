@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+Thumbs.db
 
 # debug
 npm-debug.log*
@@ -44,15 +45,23 @@ next-env.d.ts
 
 # backend
 backend/venv/
-backend/__pycache__/
-backend/app/__pycache__/
-backend/app/routes/__pycache__/
-__pycache__/
+backend/.venv/
+**/__pycache__/
 *.pyc
 *.pyo
 *.db
+backend/static/upscaled/
 
-# data & tools
+# data & tools (browser profiles, logs, etc)
 data/
 tools/
 .gemini/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+*.log
+*.tmp
+*.swp

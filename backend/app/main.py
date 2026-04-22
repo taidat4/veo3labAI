@@ -56,6 +56,9 @@ async def lifespan(app: FastAPI):
     await cleanup_stuck_jobs(max_age_minutes=10)
     logger.info("[OK] Stuck jobs cleaned up")
 
+    # Auto-cleanup old upscaled video cache (files older than 24h)
+    _cleanup_old_files()
+
     logger.info(f"[OK] Server ready at http://localhost:{settings.PORT}")
     logger.info(f"[DOCS] http://localhost:{settings.PORT}/docs")
 
@@ -66,6 +69,46 @@ async def lifespan(app: FastAPI):
     await close_redis()
     logger.info("[BYE] Goodbye!")
 
+
+def _cleanup_old_files():
+    """Auto-cleanup old cached files to prevent disk bloat."""
+    import os
+    import time
+
+    base_dir = os.path.dirname(os.path.dirname(__file__))
+    max_age = 24 * 3600  # 24 hours
+    now = time.time()
+    total_cleaned = 0
+
+    # 1. Clean old upscaled videos (backend/static/upscaled/)
+    upscaled_dir = os.path.join(base_dir, "static", "upscaled")
+    if os.path.exists(upscaled_dir):
+        for f in os.listdir(upscaled_dir):
+            fpath = os.path.join(upscaled_dir, f)
+            try:
+                if os.path.isfile(fpath) and (now - os.path.getmtime(fpath)) > max_age:
+                    size = os.path.getsize(fpath)
+                    os.remove(fpath)
+                    total_cleaned += size
+            except Exception:
+                pass
+
+    # 2. Clean __pycache__ dirs
+    for root, dirs, files in os.walk(base_dir):
+        if "__pycache__" in dirs:
+            cache_dir = os.path.join(root, "__pycache__")
+            try:
+                import shutil
+                size = sum(os.path.getsize(os.path.join(cache_dir, f)) for f in os.listdir(cache_dir) if os.path.isfile(os.path.join(cache_dir, f)))
+                shutil.rmtree(cache_dir, ignore_errors=True)
+                total_cleaned += size
+            except Exception:
+                pass
+
+    if total_cleaned > 0:
+        logger.info(f"[CLEANUP] Freed {total_cleaned / 1024 / 1024:.1f} MB of old cache files")
+    else:
+        logger.info("[CLEANUP] No old files to clean")
 
 async def _auto_migrate():
     """Add new columns to existing tables (safe for SQLite)"""
