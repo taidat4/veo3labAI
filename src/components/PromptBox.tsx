@@ -122,7 +122,7 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
         aspect_ratio: aspectRatio,
         number_of_outputs: numberOfOutputs,
         video_model: modelKey,
-        ...(isVideo && startImageId ? { start_image_id: startImageId } : {}),
+        ...(startImageId ? { start_image_id: startImageId } : {}),
         ...(isVideo ? { duration: videoDuration } : {}),
         ...(isVideo && selectedVoice ? { voice: selectedVoice } : {}),
       });
@@ -142,6 +142,13 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
           });
         });
         setPrompt("");
+        // ★ Clear reference image after generation starts
+        if (startImageId) {
+          setStartImageId(null);
+          setStartImageUrl(null);
+          setEndImageId(null);
+          setEndImageUrl(null);
+        }
         onRefreshHistory();
       }
     } catch (e: any) {

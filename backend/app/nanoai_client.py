@@ -610,6 +610,55 @@ IMAGE_AR_MAP = {
 }
 
 
+def build_nanoai_i2i_body(
+    prompt: str,
+    media_id: str,
+    aspect_ratio: str = "IMAGE_ASPECT_RATIO_LANDSCAPE",
+    image_model: str = "GEM_PIX_2",
+    project_id: str = "",
+    seed: Optional[int] = None,
+) -> dict:
+    """
+    Build body_json for Image-to-Image via NanoAI flow proxy.
+    Uses flowMedia:batchGenerateImages endpoint with imageInputs.
+
+    Matches NanoAI API docs template #4: Image to Image.
+    """
+    import random
+
+    if seed is None:
+        seed = random.randint(1000, 999999)
+
+    session_id = f";{int(time.time() * 1000)}"
+
+    return {
+        "clientContext": {
+            "recaptchaToken": "",
+            "sessionId": session_id,
+        },
+        "requests": [
+            {
+                "clientContext": {
+                    "recaptchaToken": "",
+                    "sessionId": session_id,
+                    "projectId": project_id,
+                    "tool": "PINHOLE",
+                },
+                "seed": seed,
+                "imageModelName": image_model,
+                "imageAspectRatio": aspect_ratio,
+                "prompt": prompt,
+                "imageInputs": [
+                    {
+                        "name": media_id,
+                        "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE",
+                    }
+                ],
+            }
+        ],
+    }
+
+
 _client: Optional[NanoAIClient] = None
 
 

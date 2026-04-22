@@ -1690,14 +1690,14 @@ async def _process_image_via_nanoai(
     ref_image_url: str = None,
 ):
     """
-    Image generation via NanoAI v2 API.
-    POST /api/v2/images/create → taskId → poll /api/v2/task → mediaUrl
-    If ref_image_url is provided, it's passed as imageUrls for style/reference.
+    Image generation via NanoAI.
+    - Without reference: V2 API (/api/v2/images/create)
+    - With reference: Flow proxy (flowMedia:batchGenerateImages + imageInputs)
     """
-    from app.nanoai_client import get_nanoai_client
+    from app.nanoai_client import get_nanoai_client, build_nanoai_i2i_body
 
     if ref_image_url:
-        logger.info(f"🖼️+🎨 Image with reference: url={ref_image_url[:60]}...")
+        logger.info(f"🖼️+🎨 Image-to-Image: url={ref_image_url[:60]}...")
 
     MAX_RETRIES = 5
     tried_emails = []
@@ -1719,15 +1719,117 @@ async def _process_image_via_nanoai(
             await publish_progress(user_id, job_id, {"type": "progress", "status": "processing", "progress_percent": 15})
 
             nano = get_nanoai_client()
-            # Pass reference image URLs if available
-            image_urls = [ref_image_url] if ref_image_url else None
+
+            # ═══════════════════════════════════════════════════════════
+            # IMAGE-TO-IMAGE (with reference) → Flow Proxy
+            # ═══════════════════════════════════════════════════════════
+            if ref_image_url:
+                # Step 1: Upload image to Google → get mediaId
+                google_media_id = await _upload_image_to_google(
+                    image_url=ref_image_url,
+                    token=account["token"],
+                    project_id=project_id or "",
+                )
+                if not google_media_id:
+                    logger.warning(f"⚠️ Google upload failed for I2I — falling back to text-to-image")
+                    # Fall through to V2 API without reference
+                else:
+                    # Step 2: Build I2I body with imageInputs
+                    i2i_body = build_nanoai_i2i_body(
+                        prompt=prompt,
+                        media_id=google_media_id,
+                        aspect_ratio=aspect_ratio,
+                        image_model=image_model,
+                        project_id=project_id or "",
+                    )
+
+                    # Step 3: Use flow proxy with flowMedia:batchGenerateImages
+                    i2i_flow_url = f"https://aisandbox-pa.googleapis.com/v1/projects/{project_id}/flowMedia:batchGenerateImages"
+                    logger.info(f"🖼️→🎨 I2I via flow proxy: mediaId={google_media_id[:30]}..., model={image_model}")
+
+                    create_result = await nano.create_flow(
+                        flow_auth_token=account["token"],
+                        body_json=i2i_body,
+                        flow_url=i2i_flow_url,
+                    )
+
+                    if "error" in create_result and not create_result.get("success"):
+                        error_msg = str(create_result.get("error", ""))[:200]
+                        logger.error(f"🔴 I2I flow proxy error: {error_msg}")
+                        await report_account_result(account["email"], False, error_msg)
+                        continue  # Try next account
+
+                    logger.info(f"📦 I2I flow response: {json.dumps(create_result)[:500]}")
+
+                    # Get taskId and poll
+                    task_id = create_result.get("taskId") or create_result.get("task_id")
+                    if task_id:
+                        logger.info(f"⏳ I2I taskId: {task_id}")
+                        await report_account_result(account["email"], True)
+
+                        # Poll NanoAI flow task → get Google response
+                        poll_result = await nano.poll_flow_task(task_id, max_polls=40, interval=3)
+                        if poll_result:
+                            # Parse as image result (operations or direct images)
+                            from app.veo_template import parse_image_response
+                            img_result = parse_image_response(poll_result)
+                            if img_result["success"] and img_result["images"]:
+                                img = img_result["images"][0]
+                                await update_job(
+                                    job_id, status="completed", progress_percent=100,
+                                    temp_video_url=img["download_url"],
+                                    media_id=img.get("media_id", ""),
+                                    finished_at=datetime.utcnow(),
+                                )
+                                await publish_progress(user_id, job_id, {
+                                    "type": "completed", "status": "completed",
+                                    "progress_percent": 100,
+                                    "video_url": img["download_url"],
+                                    "media_type": "image",
+                                    "media_id": img.get("media_id", ""),
+                                })
+                                logger.info(f"🎉 I2I Job {job_id} done! URL: {img['download_url'][:80]}")
+                                await complete_job(job_id, user_id)
+                                return
+
+                            # Check for operation_id (async generation)
+                            operation_id = None
+                            operations = poll_result.get("operations") or poll_result.get("generatedMediaResults", [])
+                            if operations and isinstance(operations, list):
+                                op = operations[0]
+                                operation_id = op.get("operationName") or op.get("name") or op.get("operation", {}).get("name")
+                            if not operation_id:
+                                operation_id = poll_result.get("operationName") or poll_result.get("name")
+                            if operation_id:
+                                logger.info(f"🔄 I2I got operation_id: {operation_id} — polling Google...")
+                                await poll_video_status(job_id=job_id, user_id=user_id, operation_id=operation_id, account=account)
+                                return
+
+                            logger.error(f"🔴 I2I: no images and no operation_id: {json.dumps(poll_result)[:300]}")
+                        else:
+                            logger.error(f"🔴 I2I flow task timed out")
+                        continue  # Try next account
+                    else:
+                        # No taskId — check if direct result
+                        result_data = create_result.get("data", {}) or create_result
+                        media_url = _find_url_in_data(result_data)
+                        if media_url:
+                            await update_job(job_id, status="completed", progress_percent=100, temp_video_url=media_url, finished_at=datetime.utcnow())
+                            await publish_progress(user_id, job_id, {"type": "completed", "status": "completed", "progress_percent": 100, "video_url": media_url})
+                            await complete_job(job_id, user_id)
+                            return
+                        logger.error(f"🔴 I2I: no taskId in response: {json.dumps(create_result)[:300]}")
+                        continue
+
+            # ═══════════════════════════════════════════════════════════
+            # TEXT-TO-IMAGE (no reference) → NanoAI V2 API
+            # ═══════════════════════════════════════════════════════════
             result = await nano.create_image(
                 access_token=account["token"],
                 prompt=prompt,
                 aspect_ratio=aspect_ratio,
                 image_model=image_model,
                 cookie=account.get("cookies", ""),
-                image_urls=image_urls,
             )
 
             if result.get("error") and not result.get("success"):
