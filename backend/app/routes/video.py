@@ -15,7 +15,7 @@ import httpx
 from app.database import get_db, async_session_factory
 from app.models import GenerationJob
 from app.auth import get_current_user
-from app.r2_storage import r2_storage
+
 
 logger = logging.getLogger("veo3.route.video")
 router = APIRouter(prefix="/api", tags=["Video"])
