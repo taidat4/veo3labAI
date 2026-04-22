@@ -509,6 +509,149 @@ async def _upload_image_to_google(image_url: str, token: str, project_id: str) -
         return None
 
 
+async def _image_url_to_base64(image_url: str) -> str | None:
+    """
+    Download image from URL and convert to base64 data URI.
+    
+    NanoAI V2 API's imageUrls parameter ONLY accepts base64-encoded strings
+    in format: data:image/jpeg;base64,/9j/...
+    Regular URLs cause "Upload error".
+    
+    Returns base64 data URI string or None on failure.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.get(image_url)
+            if resp.status_code != 200:
+                logger.error(f"🔴 Failed to download image for base64: HTTP {resp.status_code}")
+                return None
+            image_bytes = resp.content
+            content_type = resp.headers.get("content-type", "image/jpeg")
+            # Normalize content type
+            if ";" in content_type:
+                content_type = content_type.split(";")[0].strip()
+
+        import base64
+        b64_str = base64.b64encode(image_bytes).decode("utf-8")
+        data_uri = f"data:{content_type};base64,{b64_str}"
+        logger.info(f"📦 Converted image to base64: {len(image_bytes)} bytes → {len(data_uri)} chars ({content_type})")
+        return data_uri
+    except Exception as e:
+        logger.error(f"🔴 Image to base64 failed: {e}")
+        return None
+
+
+async def _upload_image_via_nanoai_proxy(image_url: str, token: str, project_id: str) -> str | None:
+    """
+    Upload image to Google flowMedia endpoint VIA NanoAI flow proxy.
+    
+    Direct Google upload is blocked from Railway (IP blocked).
+    NanoAI V2 imageUrls also fails with 'Upload error'.
+    
+    Solution: Use NanoAI's create-flow to proxy the upload request to Google.
+    We download the image, encode as base64, and send through NanoAI proxy
+    which forwards to Google's upload endpoint from NanoAI's unblocked IP.
+    
+    Returns Google mediaId (like "CAMaJDB...") or None on failure.
+    """
+    if not project_id:
+        logger.error("🔴 No project_id for media upload via proxy")
+        return None
+
+    try:
+        import base64
+        from app.nanoai_client import get_nanoai_client
+
+        # Step 1: Download image from our server
+        async with httpx.AsyncClient(timeout=15) as client:
+            img_resp = await client.get(image_url)
+            if img_resp.status_code != 200:
+                logger.error(f"🔴 Failed to download image: HTTP {img_resp.status_code}")
+                return None
+            image_bytes = img_resp.content
+            content_type = img_resp.headers.get("content-type", "image/jpeg")
+
+        file_size = len(image_bytes)
+        logger.info(f"📥 Downloaded image for proxy upload: {file_size} bytes, type={content_type}")
+
+        if file_size > 10 * 1024 * 1024:  # 10MB limit
+            logger.error(f"🔴 Image too large: {file_size} bytes")
+            return None
+
+        # Step 2: Encode as base64
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+        # Step 3: Upload via NanoAI flow proxy
+        # NanoAI's create-flow proxies to Google's upload endpoint
+        upload_url = f"https://aisandbox-pa.googleapis.com/upload/v1/projects/{project_id}/flowMedia"
+        upload_url += "?alt=json&uploadType=media"
+
+        nano = get_nanoai_client()
+        
+        # Use raw HTTP call through NanoAI proxy (binary upload proxy)
+        # NanoAI create-flow with special __rawUpload field
+        payload = {
+            "flow_url": upload_url,
+            "flow_auth_token": token,
+            "body_json": {
+                "__rawUpload": True,
+                "__contentType": content_type,
+                "__base64Data": image_b64,
+            },
+            "is_proxy": False,
+        }
+
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{nano.FIX_BASE}/create-flow",
+                headers=nano._headers,
+                json=payload,
+            )
+
+        logger.info(f"📤 NanoAI proxy upload: HTTP {resp.status_code}")
+
+        if resp.status_code != 200:
+            logger.error(f"🔴 NanoAI proxy upload failed: {resp.status_code} {resp.text[:500]}")
+            return None
+
+        data = resp.json()
+        logger.info(f"📦 NanoAI proxy upload response: {json.dumps(data)[:500]}")
+
+        # Extract mediaId — may be in different locations depending on proxy response
+        # Direct response from Google:
+        media_id = ""
+        result_data = data.get("result", data)
+        if isinstance(result_data, dict):
+            media_id = result_data.get("mediaId") or result_data.get("media_id") or ""
+            if not media_id:
+                name = result_data.get("name", "")
+                if name and "/" in name:
+                    media_id = name.split("/")[-1]
+
+        # Check nested data
+        if not media_id:
+            inner = data.get("data", {})
+            if isinstance(inner, dict):
+                media_id = inner.get("mediaId") or inner.get("media_id") or ""
+                if not media_id:
+                    name = inner.get("name", "")
+                    if name and "/" in name:
+                        media_id = name.split("/")[-1]
+
+        if media_id:
+            logger.info(f"✅ Got mediaId via NanoAI proxy: {media_id[:30]}...")
+            return media_id
+        else:
+            logger.error(f"🔴 No mediaId in proxy response: {json.dumps(data)[:500]}")
+            return None
+
+    except Exception as e:
+        import traceback
+        logger.error(f"🔴 NanoAI proxy upload exception: {type(e).__name__}: {e}")
+        logger.error(f"🔴 Traceback: {traceback.format_exc()}")
+        return None
+
+
 # ═══════════════════════════════════════════════════════════════
 # MAIN WORKER FUNCTION
 # ═══════════════════════════════════════════════════════════════
@@ -909,31 +1052,37 @@ async def _process_via_nanoai(
                         logger.info(f"✅ Google mediaId: {google_media_id[:30]}...")
                         start_image_id = google_media_id  # Now it's a Google mediaId
                     else:
-                        # Attempt 2: Use NanoAI V2 with imageUrls (NanoAI handles the upload)
-                        logger.warning(f"⚠️ Google direct upload failed — trying NanoAI V2 I2V...")
-                        from app.veo_template import VIDEO_ASPECT_RATIO_MAP
-                        v2_ar = VIDEO_ASPECT_RATIO_MAP.get(aspect_ratio, "VIDEO_ASPECT_RATIO_LANDSCAPE")
-                        nano = get_nanoai_client()
-                        v2_result = await nano.create_video_v2(
-                            access_token=account["token"],
-                            cookie=account.get("cookies", ""),
-                            prompt=prompt,
-                            aspect_ratio=v2_ar,
-                            video_model="VEO_3_GENERATE",
-                            image_urls=[start_image_id],
-                        )
-                        v2_task_id = v2_result.get("taskId") or v2_result.get("task_id")
-                        if v2_task_id:
-                            logger.info(f"⏳ NanoAI V2 I2V taskId: {v2_task_id}")
-                            await report_account_result(account["email"], True)
-                            poll_result = await _poll_v2_i2v_task(nano, v2_task_id, job_id, user_id, project_id, account)
-                            if poll_result == "upload_error":
-                                logger.warning(f"⚠️ V2 I2V also failed — final fallback to text-to-video")
-                                start_image_id = None
+                        # Attempt 2: NanoAI V2 with BASE64 image (NOT URL!)
+                        # NanoAI V2 imageUrls requires data:image/...;base64,... format
+                        logger.warning(f"⚠️ Google direct upload failed — trying NanoAI V2 I2V with base64...")
+                        image_b64 = await _image_url_to_base64(start_image_id)
+                        if image_b64:
+                            from app.veo_template import VIDEO_ASPECT_RATIO_MAP
+                            v2_ar = VIDEO_ASPECT_RATIO_MAP.get(aspect_ratio, "VIDEO_ASPECT_RATIO_LANDSCAPE")
+                            nano = get_nanoai_client()
+                            v2_result = await nano.create_video_v2(
+                                access_token=account["token"],
+                                cookie=account.get("cookies", ""),
+                                prompt=prompt,
+                                aspect_ratio=v2_ar,
+                                video_model="VEO_3_GENERATE",
+                                image_urls=[image_b64],  # ★ BASE64, not URL!
+                            )
+                            v2_task_id = v2_result.get("taskId") or v2_result.get("task_id")
+                            if v2_task_id:
+                                logger.info(f"⏳ NanoAI V2 I2V taskId: {v2_task_id}")
+                                await report_account_result(account["email"], True)
+                                poll_result = await _poll_v2_i2v_task(nano, v2_task_id, job_id, user_id, project_id, account)
+                                if poll_result == "upload_error":
+                                    logger.warning(f"⚠️ V2 I2V also failed — final fallback to text-to-video")
+                                    start_image_id = None
+                                else:
+                                    return  # V2 handled it (success or fail)
                             else:
-                                return  # V2 handled it (success or fail)
+                                logger.warning(f"⚠️ V2 I2V no taskId — fallback to text-to-video")
+                                start_image_id = None
                         else:
-                            logger.warning(f"⚠️ V2 I2V no taskId — fallback to text-to-video")
+                            logger.warning(f"⚠️ Failed to convert image to base64 — fallback to text-to-video")
                             start_image_id = None
 
                 if start_image_id and not start_image_id.startswith("http") and not start_image_id.startswith("/static/"):
@@ -1790,73 +1939,41 @@ async def _process_image_via_nanoai(
                     ref_url = f"https://veo3labai.com{ref_url}"
                     logger.info(f"📎 I2I: Converted to full URL: {ref_url}")
 
-                # ★ Primary: Use NanoAI V2 create_image with imageUrls
-                # NanoAI downloads the image and handles Google upload internally
-                logger.info(f"🖼️→🎨 I2I via NanoAI V2: imageUrls=[{ref_url[:60]}...]")
-                result = await nano.create_image(
-                    access_token=account["token"],
-                    prompt=prompt,
-                    aspect_ratio=aspect_ratio,
-                    image_model=image_model,
-                    cookie=account.get("cookies", ""),
-                    image_urls=[ref_url],
-                )
+                # ★ Primary: Upload image → get Google mediaId → flow proxy batchGenerateImages
+                # This is the most reliable method (matches NanoAI docs template #4)
+                media_id_for_i2i = None
 
-                if result.get("success") and result.get("taskId"):
-                    task_id = result["taskId"]
-                    logger.info(f"⏳ I2I V2 taskId: {task_id} — polling...")
-                    await report_account_result(account["email"], True)
+                # Try Google direct upload first (fast if not blocked)
+                if project_id:
+                    media_id_for_i2i = await _upload_image_to_google(
+                        image_url=ref_url,
+                        token=account["token"],
+                        project_id=project_id,
+                    )
+                    if media_id_for_i2i:
+                        logger.info(f"✅ I2I Google mediaId: {media_id_for_i2i[:30]}...")
 
-                    # Poll for result — poll_v2_task returns {done, status, data} or {done, status, error}
-                    poll_result = await nano.poll_v2_task(task_id, max_polls=40, interval=3)
-                    if poll_result and poll_result.get("status") == "completed":
-                        data = poll_result.get("data", {})
-                        media_url = data.get("mediaUrl") or data.get("imageUrl") or data.get("fileUrl") or data.get("url") or ""
-                        if media_url:
-                            await update_job(
-                                job_id, status="completed", progress_percent=100,
-                                temp_video_url=media_url,
-                                media_id=data.get("mediaId", ""),
-                                finished_at=datetime.utcnow(),
-                            )
-                            await publish_progress(user_id, job_id, {
-                                "type": "completed", "status": "completed",
-                                "progress_percent": 100,
-                                "video_url": media_url,
-                                "media_type": "image",
-                                "media_id": data.get("mediaId", ""),
-                            })
-                            logger.info(f"🎉 I2I Job {job_id} done! URL: {media_url[:80]}")
-                            return
-                    # I2I poll failed — try next account
-                    if poll_result and poll_result.get("status") == "failed":
-                        err_msg = poll_result.get("error", "I2I error")
-                        logger.error(f"🔴 I2I V2 task failed: {err_msg}")
-                        await report_account_result(account["email"], False, str(err_msg)[:200])
-                        continue
-                elif result.get("error"):
-                    err_msg = str(result.get("error", ""))[:200]
-                    logger.error(f"🔴 I2I V2 create failed: {err_msg}")
-                    await report_account_result(account["email"], False, err_msg)
-                    continue
+                # Try NanoAI proxy upload (bypasses Railway IP block)
+                if not media_id_for_i2i and project_id:
+                    media_id_for_i2i = await _upload_image_via_nanoai_proxy(
+                        image_url=ref_url,
+                        token=account["token"],
+                        project_id=project_id,
+                    )
+                    if media_id_for_i2i:
+                        logger.info(f"✅ I2I proxy mediaId: {media_id_for_i2i[:30]}...")
 
-                # ★ Fallback: Try Google upload + flow proxy
-                logger.warning(f"⚠️ I2I V2 failed — trying Google upload + flow proxy...")
-                google_media_id = await _upload_image_to_google(
-                    image_url=ref_url,
-                    token=account["token"],
-                    project_id=project_id or "",
-                )
-                if google_media_id:
+                # If we got a mediaId → use flow proxy (correct API per docs)
+                if media_id_for_i2i and project_id:
                     i2i_body = build_nanoai_i2i_body(
                         prompt=prompt,
-                        media_id=google_media_id,
+                        media_id=media_id_for_i2i,
                         aspect_ratio=aspect_ratio,
                         image_model=image_model,
-                        project_id=project_id or "",
+                        project_id=project_id,
                     )
                     i2i_flow_url = f"https://aisandbox-pa.googleapis.com/v1/projects/{project_id}/flowMedia:batchGenerateImages"
-                    logger.info(f"🖼️→🎨 I2I flow proxy: mediaId={google_media_id[:30]}...")
+                    logger.info(f"🖼️→🎨 I2I flow proxy: mediaId={media_id_for_i2i[:30]}...")
 
                     create_result = await nano.create_flow(
                         flow_auth_token=account["token"],
@@ -1889,9 +2006,56 @@ async def _process_image_via_nanoai(
                                 })
                                 logger.info(f"🎉 I2I (flow) Job {job_id} done!")
                                 return
-                    continue  # Next account
+                    # Flow proxy didn't return images — continue to next account
+                    logger.warning(f"⚠️ I2I flow proxy no result — trying next account")
+                    continue
 
-                # Both I2I methods failed — fall through to T2I
+                # ★ Fallback: Use NanoAI V2 create_image with base64 imageUrls
+                # NanoAI V2 imageUrls requires data:image/...;base64,... format
+                image_b64 = await _image_url_to_base64(ref_url)
+                if image_b64:
+                    logger.info(f"🖼️→🎨 I2I via NanoAI V2 (base64)")
+                    result = await nano.create_image(
+                        access_token=account["token"],
+                        prompt=prompt,
+                        aspect_ratio=aspect_ratio,
+                        image_model=image_model,
+                        cookie=account.get("cookies", ""),
+                        image_urls=[image_b64],  # ★ BASE64, not URL!
+                    )
+
+                    if result.get("success") and result.get("taskId"):
+                        task_id = result["taskId"]
+                        logger.info(f"⏳ I2I V2 taskId: {task_id} — polling...")
+                        await report_account_result(account["email"], True)
+
+                        poll_result = await nano.poll_v2_task(task_id, max_polls=40, interval=3)
+                        if poll_result and poll_result.get("status") == "completed":
+                            data = poll_result.get("data", {})
+                            media_url = data.get("mediaUrl") or data.get("imageUrl") or data.get("fileUrl") or data.get("url") or ""
+                            if media_url:
+                                await update_job(
+                                    job_id, status="completed", progress_percent=100,
+                                    temp_video_url=media_url,
+                                    media_id=data.get("mediaId", ""),
+                                    finished_at=datetime.utcnow(),
+                                )
+                                await publish_progress(user_id, job_id, {
+                                    "type": "completed", "status": "completed",
+                                    "progress_percent": 100,
+                                    "video_url": media_url,
+                                    "media_type": "image",
+                                    "media_id": data.get("mediaId", ""),
+                                })
+                                logger.info(f"🎉 I2I V2 Job {job_id} done! URL: {media_url[:80]}")
+                                return
+                        if poll_result and poll_result.get("status") == "failed":
+                            err_msg = poll_result.get("error", "I2I error")
+                            logger.error(f"🔴 I2I V2 task failed: {err_msg}")
+                            await report_account_result(account["email"], False, str(err_msg)[:200])
+                            continue
+
+                # All I2I methods failed — fall through to T2I
                 logger.warning(f"⚠️ All I2I methods failed — falling back to text-to-image")
 
             # ═══════════════════════════════════════════════════════════
