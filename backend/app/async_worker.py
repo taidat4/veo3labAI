@@ -399,6 +399,90 @@ async def cleanup_stuck_jobs(max_age_minutes: int = 10):
 
 
 # ═══════════════════════════════════════════════════════════════
+# GOOGLE MEDIA UPLOAD — for Image-to-Video
+# ═══════════════════════════════════════════════════════════════
+
+GOOGLE_MEDIA_UPLOAD_URL = "https://aisandbox-pa.googleapis.com/upload/v1/projects/{project_id}/flowMedia"
+
+
+async def _upload_image_to_google(image_url: str, token: str, project_id: str) -> str | None:
+    """
+    Upload image to Google's flowMedia endpoint to get a mediaId for I2V.
+    
+    Flow:
+      1. Download image from our server URL
+      2. POST raw bytes to Google's upload endpoint
+      3. Extract mediaId from response
+    
+    Returns Google mediaId (like "CAMaJDB...") or None on failure.
+    """
+    if not project_id:
+        logger.error("🔴 No project_id for Google media upload")
+        return None
+
+    try:
+        # Step 1: Download image from our server
+        async with httpx.AsyncClient(timeout=15) as client:
+            img_resp = await client.get(image_url)
+            if img_resp.status_code != 200:
+                logger.error(f"🔴 Failed to download image from {image_url[:60]}: HTTP {img_resp.status_code}")
+                return None
+            image_bytes = img_resp.content
+            content_type = img_resp.headers.get("content-type", "image/jpeg")
+
+        logger.info(f"📥 Downloaded image: {len(image_bytes)} bytes, type={content_type}")
+
+        # Step 2: Upload to Google flowMedia
+        upload_url = GOOGLE_MEDIA_UPLOAD_URL.format(project_id=project_id)
+        upload_url += "?alt=json&uploadType=media"
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": content_type,
+            "X-Goog-Upload-Protocol": "raw",
+            "Origin": "https://labs.google",
+            "Referer": "https://labs.google/",
+        }
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(upload_url, headers=headers, content=image_bytes)
+
+        logger.info(f"📤 Google media upload: HTTP {resp.status_code}")
+
+        if resp.status_code != 200:
+            logger.error(f"🔴 Google media upload failed: {resp.status_code} {resp.text[:500]}")
+            return None
+
+        # Step 3: Extract mediaId from response
+        data = resp.json()
+        logger.info(f"📦 Google media upload response: {json.dumps(data)[:500]}")
+
+        # Response format: {"name": "projects/xxx/flowMedia/MEDIA_ID", "mediaId": "CAM...", ...}
+        media_id = data.get("mediaId") or data.get("media_id") or ""
+        if not media_id:
+            # Try extracting from name field
+            name = data.get("name", "")
+            if name and "/" in name:
+                media_id = name.split("/")[-1]
+        if not media_id:
+            # Try flowMedia field
+            fm = data.get("flowMedia", {})
+            if isinstance(fm, dict):
+                media_id = fm.get("name", "").split("/")[-1] if "/" in fm.get("name", "") else fm.get("mediaId", "")
+
+        if media_id:
+            logger.info(f"✅ Google mediaId obtained: {media_id[:30]}...")
+            return media_id
+        else:
+            logger.error(f"🔴 No mediaId in Google response: {json.dumps(data)[:500]}")
+            return None
+
+    except Exception as e:
+        logger.error(f"🔴 Google media upload exception: {e}")
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
 # MAIN WORKER FUNCTION
 # ═══════════════════════════════════════════════════════════════
 
@@ -780,45 +864,22 @@ async def _process_via_nanoai(
                 # Check if start_image_id is a URL (our server) vs Google mediaId
                 is_url = start_image_id.startswith("http") or start_image_id.startswith("/static/")
                 if is_url:
-                    # ★ Image hosted on our server → use NanoAI V2 API with imageUrls
-                    from app.veo_template import VIDEO_ASPECT_RATIO_MAP
-                    v2_ar = VIDEO_ASPECT_RATIO_MAP.get(aspect_ratio, "VIDEO_ASPECT_RATIO_LANDSCAPE")
-                    logger.info(f"🖼️→🎬 Image-to-Video (V2 imageUrls): url={start_image_id[:60]}...")
-                    nano = get_nanoai_client()
-                    create_result = await nano.create_video_v2(
-                        access_token=account["token"],
-                        cookie=account.get("cookies", ""),
-                        prompt=prompt,
-                        aspect_ratio=v2_ar,
-                        video_model="VEO_3_GENERATE",
-                        image_urls=[start_image_id],
+                    # ★ URL → upload to Google media endpoint to get mediaId
+                    logger.info(f"🖼️→📤 Uploading image to Google: {start_image_id[:60]}...")
+                    google_media_id = await _upload_image_to_google(
+                        image_url=start_image_id,
+                        token=account["token"],
+                        project_id=project_id,
                     )
-                    if "error" in create_result and not create_result.get("success"):
-                        error_msg = f"NanoAI V2 I2V: {str(create_result.get('error', ''))[:200]}"
-                        logger.error(f"🔴 V2 I2V error: {error_msg}")
-                        await report_account_result(account["email"], False, error_msg)
-                        await fail_job(job_id, user_id, error_msg)
-                        return
-                    task_id_v2 = create_result.get("taskId") or create_result.get("task_id")
-                    if task_id_v2:
-                        logger.info(f"⏳ V2 I2V taskId: {task_id_v2}")
-                        await report_account_result(account["email"], True)
-                        # Poll V2 task — if "Upload error", fallback to text-to-video
-                        poll_result = await _poll_v2_i2v_task(nano, task_id_v2, job_id, user_id, project_id, account)
-                        if poll_result == "upload_error":
-                            # ★ I2V failed — fallback to text-to-video
-                            logger.warning(f"⚠️ I2V Upload error — falling back to text-to-video for job {job_id}")
-                            start_image_id = None  # Clear so it goes through T2V path below
-                            # Don't return — fall through to T2V flow below
-                        else:
-                            return  # Success or other failure already handled
+                    if google_media_id:
+                        logger.info(f"✅ Google mediaId: {google_media_id[:30]}...")
+                        start_image_id = google_media_id  # Now it's a Google mediaId
                     else:
-                        logger.error(f"🔴 No V2 taskId: {str(create_result)[:300]}")
-                        # Fallback to T2V
-                        logger.warning(f"⚠️ V2 I2V no taskId — falling back to text-to-video")
-                        start_image_id = None
-                else:
-                    # Google mediaId → use flow proxy with startImage
+                        logger.warning(f"⚠️ Google upload failed — falling back to text-to-video")
+                        start_image_id = None  # Fallback to T2V
+
+                if start_image_id:
+                    # Google mediaId → use flow proxy with startImage + batchAsyncGenerateVideoStartImage
                     i2v_model = "veo_3_1_i2v_s_fast_ultra"
                     body = build_nanoai_i2v_body(
                         prompt=prompt,
@@ -827,7 +888,7 @@ async def _process_via_nanoai(
                         video_model=i2v_model,
                         project_id=project_id,
                     )
-                    logger.info(f"🖼️→🎬 Image-to-Video (mediaId): imageId={start_image_id[:20]}..., model={i2v_model}")
+                    logger.info(f"🖼️→🎬 Image-to-Video (flow proxy): mediaId={start_image_id[:30]}..., model={i2v_model}")
             else:
                 body = build_nanoai_body(
                     prompt=prompt,
@@ -861,8 +922,13 @@ async def _process_via_nanoai(
             # NanoAI handles EVERYTHING (no direct Google calls)
             # ══════════════════════════════════════════════════════
             nano = get_nanoai_client()
-            # Use different Google endpoint for image-to-video (Google mediaId path)
-            i2v_flow_url = "https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartImage" if (start_image_id and not start_image_id.startswith("http") and not start_image_id.startswith("/static/")) else ""
+            # I2V uses a different Google endpoint: batchAsyncGenerateVideoStartImage
+            is_i2v = start_image_id and not start_image_id.startswith("http") and not start_image_id.startswith("/static/")
+            if is_i2v:
+                i2v_flow_url = "https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartImage"
+                logger.info(f"🎯 Using I2V endpoint: {i2v_flow_url}")
+            else:
+                i2v_flow_url = ""  # Default (batchAsyncGenerateVideoText)
             create_result = await nano.create_flow(
                 flow_auth_token=account["token"],
                 body_json=body,
