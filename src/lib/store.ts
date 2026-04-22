@@ -231,15 +231,37 @@ export const useStore = create<AppStore>((set, get) => ({
   setEndImageUrl: (v) => set({ endImageUrl: v }),
 
   // ── Image Library ──
-  uploadedImages: (typeof window !== "undefined" ? JSON.parse(localStorage.getItem("veo3_uploaded_images") || "[]") : []) as UploadedImage[],
+  uploadedImages: (() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = JSON.parse(localStorage.getItem("veo3_uploaded_images") || "[]") as UploadedImage[];
+      // Auto-clean: remove entries with data URLs (old format that fills quota)
+      const cleaned = raw.filter((img) => !img.url.startsWith("data:") && !img.mediaId.startsWith("data:"));
+      if (cleaned.length !== raw.length) {
+        localStorage.setItem("veo3_uploaded_images", JSON.stringify(cleaned));
+      }
+      return cleaned;
+    } catch { return []; }
+  })(),
   addUploadedImage: (img) => set((s) => {
     const next = [img, ...s.uploadedImages].slice(0, 50); // max 50
-    if (typeof window !== "undefined") localStorage.setItem("veo3_uploaded_images", JSON.stringify(next));
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("veo3_uploaded_images", JSON.stringify(next));
+      } catch (e) {
+        // localStorage quota exceeded — remove oldest entries and retry
+        console.warn("localStorage quota exceeded, cleaning old images...", e);
+        const smaller = next.slice(0, 20);
+        try { localStorage.setItem("veo3_uploaded_images", JSON.stringify(smaller)); } catch { }
+      }
+    }
     return { uploadedImages: next };
   }),
   removeUploadedImage: (id) => set((s) => {
     const next = s.uploadedImages.filter((i) => i.id !== id);
-    if (typeof window !== "undefined") localStorage.setItem("veo3_uploaded_images", JSON.stringify(next));
+    if (typeof window !== "undefined") {
+      try { localStorage.setItem("veo3_uploaded_images", JSON.stringify(next)); } catch { }
+    }
     return { uploadedImages: next };
   }),
   clearUploadedImages: () => {

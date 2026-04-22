@@ -265,30 +265,26 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
       });
       const data = await res.json();
       if (data.success && data.media_id) {
-        // Server saved image and returned public_url
+        // Server saved image and returned URLs
         const publicUrl = data.public_url || data.url || "";
-        // Create data URL for local preview in library
-        const reader = new FileReader();
-        reader.onload = () => {
-          const dataUrl = reader.result as string;
-          // Save to library — mediaId stores the public_url for generation
-          addUploadedImage({
-            id: `img-${Date.now()}`,
-            mediaId: publicUrl, // public URL for NanoAI API
-            url: dataUrl,       // data URL for local preview
-            name: file.name,
-            uploadedAt: Date.now(),
-          });
-          // Set as active reference — startImageId = public URL
-          if (target === "start") {
-            setStartImageId(publicUrl);
-            setStartImageUrl(dataUrl);
-          } else {
-            setEndImageId(publicUrl);
-            setEndImageUrl(dataUrl);
-          }
-        };
-        reader.readAsDataURL(file);
+        const previewUrl = data.url || publicUrl; // /static/uploads/... (small string, not data URL)
+        // Save to library — use server URL for both preview and generation
+        // ★ Do NOT use data URLs — they fill up localStorage (5MB limit!)
+        addUploadedImage({
+          id: `img-${Date.now()}`,
+          mediaId: publicUrl, // public URL for NanoAI API
+          url: previewUrl,    // server URL for preview (tiny vs data URL)
+          name: file.name,
+          uploadedAt: Date.now(),
+        });
+        // Set as active reference
+        if (target === "start") {
+          setStartImageId(publicUrl);
+          setStartImageUrl(previewUrl);
+        } else {
+          setEndImageId(publicUrl);
+          setEndImageUrl(previewUrl);
+        }
         showToast(`✅ Đã tải ảnh lên!`, "success");
         setShowLibrary(false);
       } else {
