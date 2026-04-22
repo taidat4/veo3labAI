@@ -157,10 +157,16 @@ export const useStore = create<AppStore>((set, get) => ({
     if (user) {
       localStorage.setItem("veo3_token", user.token);
       localStorage.setItem("veo3_user", JSON.stringify(user));
+      // Load this user's image library
+      try {
+        const raw = JSON.parse(localStorage.getItem(`veo3_uploaded_images_${user.user_id}`) || "[]") as UploadedImage[];
+        const cleaned = raw.filter((img) => !img.url.startsWith("data:") && !img.mediaId.startsWith("data:"));
+        set({ uploadedImages: cleaned });
+      } catch { set({ uploadedImages: [] }); }
     }
   },
   logout: () => {
-    set({ user: null, activeJobs: new Map(), history: [], batchRows: [] });
+    set({ user: null, activeJobs: new Map(), history: [], batchRows: [], uploadedImages: [] });
     localStorage.removeItem("veo3_token");
     localStorage.removeItem("veo3_user");
   },
@@ -230,15 +236,19 @@ export const useStore = create<AppStore>((set, get) => ({
   endImageUrl: null,
   setEndImageUrl: (v) => set({ endImageUrl: v }),
 
-  // ── Image Library ──
+  // ── Image Library (per-user via localStorage) ──
   uploadedImages: (() => {
     if (typeof window === "undefined") return [];
     try {
-      const raw = JSON.parse(localStorage.getItem("veo3_uploaded_images") || "[]") as UploadedImage[];
+      // Try to get user_id from stored user data for per-user key
+      const storedUser = JSON.parse(localStorage.getItem("veo3_user") || "null");
+      const userId = storedUser?.user_id;
+      const key = userId ? `veo3_uploaded_images_${userId}` : "veo3_uploaded_images";
+      const raw = JSON.parse(localStorage.getItem(key) || "[]") as UploadedImage[];
       // Auto-clean: remove entries with data URLs (old format that fills quota)
       const cleaned = raw.filter((img) => !img.url.startsWith("data:") && !img.mediaId.startsWith("data:"));
       if (cleaned.length !== raw.length) {
-        localStorage.setItem("veo3_uploaded_images", JSON.stringify(cleaned));
+        localStorage.setItem(key, JSON.stringify(cleaned));
       }
       return cleaned;
     } catch { return []; }
@@ -246,13 +256,16 @@ export const useStore = create<AppStore>((set, get) => ({
   addUploadedImage: (img) => set((s) => {
     const next = [img, ...s.uploadedImages].slice(0, 50); // max 50
     if (typeof window !== "undefined") {
+      const storedUser = JSON.parse(localStorage.getItem("veo3_user") || "null");
+      const userId = storedUser?.user_id;
+      const key = userId ? `veo3_uploaded_images_${userId}` : "veo3_uploaded_images";
       try {
-        localStorage.setItem("veo3_uploaded_images", JSON.stringify(next));
+        localStorage.setItem(key, JSON.stringify(next));
       } catch (e) {
         // localStorage quota exceeded — remove oldest entries and retry
         console.warn("localStorage quota exceeded, cleaning old images...", e);
         const smaller = next.slice(0, 20);
-        try { localStorage.setItem("veo3_uploaded_images", JSON.stringify(smaller)); } catch { }
+        try { localStorage.setItem(key, JSON.stringify(smaller)); } catch { }
       }
     }
     return { uploadedImages: next };
@@ -260,12 +273,20 @@ export const useStore = create<AppStore>((set, get) => ({
   removeUploadedImage: (id) => set((s) => {
     const next = s.uploadedImages.filter((i) => i.id !== id);
     if (typeof window !== "undefined") {
-      try { localStorage.setItem("veo3_uploaded_images", JSON.stringify(next)); } catch { }
+      const storedUser = JSON.parse(localStorage.getItem("veo3_user") || "null");
+      const userId = storedUser?.user_id;
+      const key = userId ? `veo3_uploaded_images_${userId}` : "veo3_uploaded_images";
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch { }
     }
     return { uploadedImages: next };
   }),
   clearUploadedImages: () => {
-    if (typeof window !== "undefined") localStorage.removeItem("veo3_uploaded_images");
+    if (typeof window !== "undefined") {
+      const storedUser = JSON.parse(localStorage.getItem("veo3_user") || "null");
+      const userId = storedUser?.user_id;
+      const key = userId ? `veo3_uploaded_images_${userId}` : "veo3_uploaded_images";
+      localStorage.removeItem(key);
+    }
     set({ uploadedImages: [] });
   },
 
