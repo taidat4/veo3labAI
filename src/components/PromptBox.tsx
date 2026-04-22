@@ -84,8 +84,12 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
   const setEndImageId = useStore((s) => s.setEndImageId);
   const setEndImageUrl = useStore((s) => s.setEndImageUrl);
   const selectedVoice = useStore((s) => s.selectedVoice);
+  const uploadedImages = useStore((s) => s.uploadedImages);
+  const addUploadedImage = useStore((s) => s.addUploadedImage);
+  const removeUploadedImage = useStore((s) => s.removeUploadedImage);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [activeFrame, setActiveFrame] = useState<"start" | "end">("start");
+  const [showLibrary, setShowLibrary] = useState(false);
 
   const isVideo = mediaTab === "video";
   const currentModel = isVideo
@@ -261,14 +265,30 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
       });
       const data = await res.json();
       if (data.success && data.media_id) {
-        if (target === "start") {
-          setStartImageId(data.media_id);
-          setStartImageUrl(URL.createObjectURL(file));
-        } else {
-          setEndImageId(data.media_id);
-          setEndImageUrl(URL.createObjectURL(file));
-        }
-        showToast(`✅ Đã tải ảnh ${target === "start" ? "bắt đầu" : "kết thúc"} lên!`, "success");
+        // Create data URL for persistent preview (blob URLs don't survive refresh)
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          // Save to library
+          addUploadedImage({
+            id: `img-${Date.now()}`,
+            mediaId: data.media_id,
+            url: dataUrl,
+            name: file.name,
+            uploadedAt: Date.now(),
+          });
+          // Set as active reference
+          if (target === "start") {
+            setStartImageId(data.media_id);
+            setStartImageUrl(dataUrl);
+          } else {
+            setEndImageId(data.media_id);
+            setEndImageUrl(dataUrl);
+          }
+        };
+        reader.readAsDataURL(file);
+        showToast(`✅ Đã tải ảnh lên!`, "success");
+        setShowLibrary(false);
       } else {
         showToast(data.detail || "Lỗi upload ảnh", "error");
       }
@@ -278,6 +298,19 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
       setUploadingImage(false);
       if (imageUploadRef.current) imageUploadRef.current.value = "";
     }
+  };
+
+  // Select image from library
+  const selectFromLibrary = (img: { mediaId: string; url: string }) => {
+    if (activeFrame === "start") {
+      setStartImageId(img.mediaId);
+      setStartImageUrl(img.url);
+    } else {
+      setEndImageId(img.mediaId);
+      setEndImageUrl(img.url);
+    }
+    setShowLibrary(false);
+    showToast("✅ Đã chọn ảnh!", "success");
   };
 
   return (
@@ -390,9 +423,9 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
             />
             {((!isVideo) || (isVideo && videoSubTab === "components")) && (
               <button
-                onClick={() => { setActiveFrame("start"); imageUploadRef.current?.click(); }}
+                onClick={() => setShowLibrary(true)}
                 className="shrink-0 flex items-center justify-center rounded-full transition-all hover:scale-105"
-                title="Tải ảnh tham chiếu"
+                title="Thư viện ảnh"
                 style={{
                   width: 40, height: 40,
                   border: "2px solid var(--border-subtle)",
@@ -477,6 +510,103 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
           </div>
         </div>
       </div>
+
+      {/* ═══ IMAGE LIBRARY MODAL ═══ */}
+      {showLibrary && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowLibrary(false); }}
+        >
+          <div className="glass-card p-0 w-full max-w-[700px] max-h-[80vh] mx-4 flex flex-col overflow-hidden"
+            style={{ borderRadius: "20px" }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+              <h3 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>Thư viện ảnh</h3>
+              <button
+                onClick={() => setShowLibrary(false)}
+                className="btn-ghost !p-1 !rounded-lg"
+              >
+                <span className="material-symbols-rounded text-lg" style={{ color: "var(--text-muted)" }}>close</span>
+              </button>
+            </div>
+
+            {/* Image Grid */}
+            <div className="flex-1 overflow-y-auto p-4" style={{ minHeight: "200px" }}>
+              {uploadedImages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <span className="material-symbols-rounded" style={{ fontSize: "48px", color: "var(--text-muted)" }}>photo_library</span>
+                  <p className="text-sm" style={{ color: "var(--text-muted)" }}>Không tìm thấy kết quả nào</p>
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>Tải ảnh lên để sử dụng làm tham chiếu</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-3">
+                  {uploadedImages.map((img) => (
+                    <div
+                      key={img.id}
+                      className="relative rounded-xl overflow-hidden cursor-pointer group transition-all hover:ring-2 hover:ring-[var(--neon-blue)]"
+                      style={{ aspectRatio: "1", background: "var(--bg-tertiary)" }}
+                      onClick={() => selectFromLibrary(img)}
+                    >
+                      <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
+                      {/* Selected indicator */}
+                      {startImageId === img.mediaId && (
+                        <div className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full flex items-center justify-center"
+                          style={{ background: "var(--neon-blue)" }}
+                        >
+                          <span className="material-symbols-rounded text-white" style={{ fontSize: "14px" }}>check</span>
+                        </div>
+                      )}
+                      {/* Delete button */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeUploadedImage(img.id); }}
+                        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        style={{ background: "rgba(0,0,0,0.7)" }}
+                      >
+                        <span className="material-symbols-rounded text-white" style={{ fontSize: "14px" }}>delete</span>
+                      </button>
+                      {/* Name */}
+                      <div className="absolute bottom-0 left-0 right-0 px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        style={{ background: "linear-gradient(transparent, rgba(0,0,0,0.7))" }}
+                      >
+                        <p className="text-[10px] text-white truncate">{img.name}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer — Upload button */}
+            <div className="px-5 py-4 flex items-center gap-3" style={{ borderTop: "1px solid var(--border-subtle)" }}>
+              <input
+                ref={imageUploadRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleImageUpload(e, activeFrame)}
+              />
+              <button
+                onClick={() => imageUploadRef.current?.click()}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all hover:scale-[1.02]"
+                style={{
+                  border: "1.5px solid var(--border-subtle)",
+                  background: "var(--bg-tertiary)",
+                  color: "var(--text-primary)",
+                }}
+                disabled={uploadingImage}
+              >
+                {uploadingImage ? (
+                  <span className="spinner !w-4 !h-4 !border-current/20 !border-t-current"></span>
+                ) : (
+                  <span className="material-symbols-rounded" style={{ fontSize: "18px" }}>upload</span>
+                )}
+                <span className="text-sm font-medium">Tải hình ảnh lên</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ═══ BULK IMPORT MODAL ═══ */}
       {showBulkModal && (

@@ -58,6 +58,14 @@ export interface BatchRow {
   mediaType?: string;
 }
 
+export interface UploadedImage {
+  id: string;         // unique client ID
+  mediaId: string;    // server-side mediaId
+  url: string;        // local blob URL or data URL for preview
+  name: string;       // original filename
+  uploadedAt: number; // timestamp
+}
+
 // ── Store ──
 interface AppStore {
   // Auth
@@ -110,6 +118,12 @@ interface AppStore {
   setEndImageId: (v: string | null) => void;
   endImageUrl: string | null;
   setEndImageUrl: (v: string | null) => void;
+
+  // Image library
+  uploadedImages: UploadedImage[];
+  addUploadedImage: (img: UploadedImage) => void;
+  removeUploadedImage: (id: string) => void;
+  clearUploadedImages: () => void;
 
   // Queue info
   queueCount: number;
@@ -215,6 +229,23 @@ export const useStore = create<AppStore>((set, get) => ({
   setEndImageId: (v) => set({ endImageId: v }),
   endImageUrl: null,
   setEndImageUrl: (v) => set({ endImageUrl: v }),
+
+  // ── Image Library ──
+  uploadedImages: (typeof window !== "undefined" ? JSON.parse(localStorage.getItem("veo3_uploaded_images") || "[]") : []) as UploadedImage[],
+  addUploadedImage: (img) => set((s) => {
+    const next = [img, ...s.uploadedImages].slice(0, 50); // max 50
+    if (typeof window !== "undefined") localStorage.setItem("veo3_uploaded_images", JSON.stringify(next));
+    return { uploadedImages: next };
+  }),
+  removeUploadedImage: (id) => set((s) => {
+    const next = s.uploadedImages.filter((i) => i.id !== id);
+    if (typeof window !== "undefined") localStorage.setItem("veo3_uploaded_images", JSON.stringify(next));
+    return { uploadedImages: next };
+  }),
+  clearUploadedImages: () => {
+    if (typeof window !== "undefined") localStorage.removeItem("veo3_uploaded_images");
+    set({ uploadedImages: [] });
+  },
 
   // ── Queue ──
   queueCount: 0,
