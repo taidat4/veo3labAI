@@ -361,8 +361,8 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
             </div>
           )}
 
-          {/* Image preview (if uploaded in Components mode) */}
-          {isVideo && videoSubTab === "components" && startImageUrl && (
+          {/* Image preview (if uploaded in Components or Image mode) */}
+          {((!isVideo) || (isVideo && videoSubTab === "components")) && startImageUrl && (
             <div className="flex items-center gap-2 mb-2 pb-2" style={{ borderBottom: "1px solid var(--prompt-border)" }}>
               <div className="relative rounded-lg overflow-hidden" style={{ width: 48, height: 48 }}>
                 <img src={startImageUrl} alt="Ref" className="w-full h-full object-cover" />
@@ -388,7 +388,7 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
               className="hidden"
               onChange={(e) => handleImageUpload(e, activeFrame)}
             />
-            {isVideo && videoSubTab === "components" && (
+            {((!isVideo) || (isVideo && videoSubTab === "components")) && (
               <button
                 onClick={() => { setActiveFrame("start"); imageUploadRef.current?.click(); }}
                 className="shrink-0 flex items-center justify-center rounded-full transition-all hover:scale-105"
