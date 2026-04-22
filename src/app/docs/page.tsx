@@ -177,6 +177,7 @@ export default function DocsPage() {
 #   "user_id": 1,
 #   "username": "user123",
 #   "balance": 50000,
+#   "credits": 100,
 #   "role": "user"
 # }`}
               </pre>
@@ -279,12 +280,10 @@ poll();`}
                 </thead>
                 <tbody>
                   {[
-                    { field: "prompt", type: "string", desc: "Nội dung mô tả (bắt buộc)", def: "—" },
+                    { field: "prompt", type: "string", desc: "Nội dung mô tả (bắt buộc, tối đa 5000 ký tự)", def: "—" },
                     { field: "video_model", type: "string", desc: "Model key (xem bảng trên)", def: "veo31_fast_lp" },
                     { field: "aspect_ratio", type: "string", desc: "16:9 | 9:16 | 1:1 | 4:3 | 3:4", def: "16:9" },
                     { field: "number_of_outputs", type: "int", desc: "Số lượng (1-4)", def: "1" },
-                    { field: "start_image_id", type: "string?", desc: "Image URL cho Image-to-Video", def: "null" },
-                    { field: "duration", type: "string?", desc: "Thời lượng video: 4 | 6 | 8", def: "null" },
                   ].map((p, i) => (
                     <tr key={i} style={{ borderTop: "1px solid var(--border-subtle)" }}>
                       <td className="px-4 py-2.5 font-mono font-semibold" style={{ color: "var(--neon-blue)" }}>{p.field}</td>

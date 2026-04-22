@@ -39,6 +39,7 @@ async def api_me(request: Request, db: AsyncSession = Depends(get_db)):
         "user_id": user.id,
         "username": user.username,
         "balance": user.balance,
+        "credits": getattr(user, 'credits', 0) or 0,
         "role": user.role,
         "plan_id": user.plan_id,
         "plan_expires_at": user.plan_expires_at.isoformat() if user.plan_expires_at else None,

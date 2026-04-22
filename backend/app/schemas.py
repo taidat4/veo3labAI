@@ -68,8 +68,8 @@ class GenerateRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=5000)
     aspect_ratio: AspectRatio = AspectRatio.LANDSCAPE
     number_of_outputs: int = Field(default=1, ge=1, le=4)
-    video_model: MediaModel = MediaModel.VEO31_FAST
-    resolution: str = Field(default="720", pattern="^(720|1080|4k)$")
+    video_model: MediaModel = MediaModel.VEO31_FAST_LP
+    resolution: str = Field(default="720", pattern="^(720|1080)$")
     start_image_id: Optional[str] = None  # mediaId for image-to-video
     duration: Optional[str] = None  # "4" | "6" | "8"
     voice: Optional[str] = None  # voice ID for Thành phần
@@ -80,8 +80,8 @@ class BulkGenerateRequest(BaseModel):
     prompts: list[str] = Field(min_length=1, max_length=100)
     aspect_ratio: AspectRatio = AspectRatio.LANDSCAPE
     number_of_outputs: int = Field(default=1, ge=1, le=4)
-    video_model: MediaModel = MediaModel.VEO31_FAST
-    resolution: str = Field(default="720", pattern="^(720|1080|4k)$")
+    video_model: MediaModel = MediaModel.VEO31_FAST_LP
+    resolution: str = Field(default="720", pattern="^(720|1080)$")
 
 
 class GenerateResponse(BaseModel):
