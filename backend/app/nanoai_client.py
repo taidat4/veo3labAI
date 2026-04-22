@@ -371,8 +371,9 @@ class NanoAIClient:
 
                 if code in ("error", "failed", "not_found"):
                     error_msg = result.get("message", code)
+                    error_data = result.get("data", {})
                     logger.error(f"🔴 NanoAI v2 task {task_id[:16]} FAILED: code={code}, msg={error_msg}, full={json.dumps(result)[:500]}")
-                    return {"done": True, "status": "failed", "error": error_msg}
+                    return {"done": True, "status": "failed", "error": error_msg, "data": error_data}
 
                 # "processing" → keep polling
 

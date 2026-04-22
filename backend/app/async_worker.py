@@ -1580,17 +1580,38 @@ async def _process_image_via_nanoai(
                 raw_error = str(result.get("error", ""))
                 # Try to extract detailed error from data
                 data_error = result.get("data", {})
+                is_auth_error = False
                 if isinstance(data_error, dict):
                     inner = data_error.get("error", {})
                     if isinstance(inner, dict):
                         reason = inner.get("message", "")
+                        err_code = inner.get("code", 0)
+                        err_status = inner.get("status", "")
                         details = inner.get("details", [])
                         for d in details if isinstance(details, list) else []:
                             if isinstance(d, dict) and d.get("reason"):
                                 reason = d["reason"]
                         raw_error = reason or raw_error
+                        # Detect 401 UNAUTHENTICATED
+                        if err_code == 401 or err_status == "UNAUTHENTICATED" or "authentication" in raw_error.lower():
+                            is_auth_error = True
 
                 logger.error(f"🔴 NanoAI image error: {raw_error[:200]}")
+
+                # ★ 401 UNAUTHENTICATED — disable account + retry next
+                if is_auth_error:
+                    logger.error(f"🔴 Token expired (401) for {account['email']} — disabling + trying next")
+                    await report_account_result(account["email"], False, "Token 401 UNAUTHENTICATED")
+                    try:
+                        async with async_session_factory() as s:
+                            acc = (await s.execute(select(UltraAccount).where(UltraAccount.email == account["email"]))).scalar_one_or_none()
+                            if acc:
+                                acc.is_active = False
+                                await s.commit()
+                                logger.info(f"🚫 Account {account['email']} disabled due to 401")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to disable account: {e}")
+                    continue  # Try next account
 
                 # IP Filter / Policy — FAIL immediately, no retry
                 if "IP_FILTER" in raw_error:
@@ -1731,6 +1752,30 @@ async def _process_image_via_nanoai(
                     return
             else:
                 error = poll_result.get("error", "Unknown")
+                # Extract detailed error from poll_result
+                poll_data = poll_result.get("data", {})
+                if isinstance(poll_data, dict):
+                    inner_err = poll_data.get("error", {})
+                    if isinstance(inner_err, dict):
+                        err_code = inner_err.get("code", 0)
+                        err_status = inner_err.get("status", "")
+                        err_msg = inner_err.get("message", "")
+                        if err_code == 401 or err_status == "UNAUTHENTICATED":
+                            logger.error(f"🔴 Token expired (401) during image poll for {account['email']}")
+                            await report_account_result(account["email"], False, "Token 401 UNAUTHENTICATED")
+                            try:
+                                async with async_session_factory() as s:
+                                    acc = (await s.execute(select(UltraAccount).where(UltraAccount.email == account["email"]))).scalar_one_or_none()
+                                    if acc:
+                                        acc.is_active = False
+                                        await s.commit()
+                                        logger.info(f"🚫 Account {account['email']} disabled due to 401")
+                            except Exception:
+                                pass
+                            error = "Token hết hạn — vui lòng thử lại"
+                            continue  # Try next account
+                        if err_msg:
+                            error = err_msg
                 await fail_job(job_id, user_id, f"NanoAI image failed: {error}")
                 return
 
