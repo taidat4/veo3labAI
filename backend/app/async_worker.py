@@ -281,20 +281,21 @@ async def complete_job(job_id: int, user_id: int):
     """Called after successful completion — dispatch next waiting job + save to R2"""
     await _release_slot_and_dispatch_next(user_id)
 
-    # ★ Background: upload media to R2 for permanent storage
+    # ★ Background: upload media to R2 for permanent storage (only if configured)
     try:
-        async with async_session_factory() as session:
-            job = (await session.execute(
-                select(GenerationJob).where(GenerationJob.id == job_id)
-            )).scalar_one_or_none()
-            if job and job.temp_video_url and not job.r2_url:
-                media_type = (job.params or {}).get("media_type", "video")
-                temp_url = job.temp_video_url
-                asyncio.create_task(
-                    _save_to_r2_background(job_id, temp_url, media_type, user_id)
-                )
+        if settings.R2_ENDPOINT and settings.R2_ACCESS_KEY:
+            async with async_session_factory() as session:
+                job = (await session.execute(
+                    select(GenerationJob).where(GenerationJob.id == job_id)
+                )).scalar_one_or_none()
+                if job and job.temp_video_url and not job.r2_url:
+                    media_type = (job.params or {}).get("media_type", "video")
+                    temp_url = job.temp_video_url
+                    asyncio.create_task(
+                        _save_to_r2_background(job_id, temp_url, media_type, user_id)
+                    )
     except Exception as e:
-        logger.warning(f"⚠️ R2 background task init error: {e}")
+        pass  # R2 is optional, never crash
 
 
 async def _save_to_r2_background(job_id: int, source_url: str, media_type: str, user_id: int):

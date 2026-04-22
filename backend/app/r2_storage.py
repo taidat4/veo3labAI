@@ -22,8 +22,12 @@ settings = get_settings()
 
 def _get_r2_client():
     """Get boto3 S3 client configured for Cloudflare R2."""
-    import boto3
-    from botocore.config import Config as BotoConfig
+    try:
+        import boto3
+        from botocore.config import Config as BotoConfig
+    except ImportError:
+        logger.warning("⚠️ boto3 not installed — R2 storage disabled")
+        return None
 
     if not settings.R2_ENDPOINT or not settings.R2_ACCESS_KEY:
         return None

@@ -59,20 +59,20 @@ async def lifespan(app: FastAPI):
     # Auto-cleanup old upscaled video cache (files older than 24h)
     _cleanup_old_files()
 
-    # ── R2 Permanent Storage: cleanup + backfill ──
+    # ── R2 Permanent Storage: cleanup + backfill (fully optional) ──
     import asyncio
     try:
         from app.r2_storage import cleanup_old_media
-        deleted = await cleanup_old_media(max_age_days=30)
-        logger.info(f"[R2] Cleanup done: {deleted} old files removed (>30 days)")
+        if settings.R2_ENDPOINT and settings.R2_ACCESS_KEY:
+            deleted = await cleanup_old_media(max_age_days=30)
+            logger.info(f"[R2] Cleanup done: {deleted} old files removed (>30 days)")
+            asyncio.create_task(_r2_periodic_cleanup())
+            asyncio.create_task(_r2_backfill_existing())
+            logger.info("[R2] Permanent storage enabled")
+        else:
+            logger.info("[R2] Not configured — using temp URLs only")
     except Exception as e:
-        logger.warning(f"[R2] Cleanup skipped: {e}")
-
-    # Start periodic R2 cleanup (every 24h)
-    asyncio.create_task(_r2_periodic_cleanup())
-
-    # Backfill: upload existing completed jobs that still have temp URLs
-    asyncio.create_task(_r2_backfill_existing())
+        logger.warning(f"[R2] Disabled: {e}")
 
     logger.info(f"[OK] Server ready at http://localhost:{settings.PORT}")
     logger.info(f"[DOCS] http://localhost:{settings.PORT}/docs")
