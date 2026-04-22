@@ -284,73 +284,6 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
     <>
       <div className="flex flex-col gap-3 w-full fade-in" style={{ padding: "0 300px" }}>
 
-        {/* ═══ Keyframe UI (Khung hình mode) ═══ */}
-        {isVideo && videoSubTab === "keyframes" && (
-          <div className="flex items-center gap-3 px-4">
-            {/* Start frame */}
-            <div
-              className="relative rounded-xl overflow-hidden cursor-pointer group transition-all"
-              style={{
-                width: 80, height: 80,
-                border: activeFrame === "start" ? "2px solid var(--neon-blue)" : "2px solid var(--border-subtle)",
-                background: "var(--bg-tertiary)",
-              }}
-              onClick={() => { setActiveFrame("start"); imageUploadRef.current?.click(); }}
-            >
-              {startImageUrl ? (
-                <img src={startImageUrl} alt="Start" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center">
-                  <span className="material-symbols-rounded text-xl" style={{ color: "var(--text-muted)" }}>add_photo_alternate</span>
-                  <span className="text-[9px] font-medium" style={{ color: "var(--text-muted)" }}>Bắt đầu</span>
-                </div>
-              )}
-              {startImageUrl && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setStartImageId(null); setStartImageUrl(null); }}
-                  className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  style={{ background: "rgba(0,0,0,0.6)" }}
-                >
-                  <span className="material-symbols-rounded text-white" style={{ fontSize: "12px" }}>close</span>
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1">
-              <span className="material-symbols-rounded" style={{ color: "var(--text-muted)", fontSize: "18px" }}>swap_horiz</span>
-            </div>
-
-            {/* End frame */}
-            <div
-              className="relative rounded-xl overflow-hidden cursor-pointer group transition-all"
-              style={{
-                width: 80, height: 80,
-                border: activeFrame === "end" ? "2px solid var(--neon-purple)" : "2px solid var(--border-subtle)",
-                background: "var(--bg-tertiary)",
-              }}
-              onClick={() => { setActiveFrame("end"); imageUploadRef.current?.click(); }}
-            >
-              {endImageUrl ? (
-                <img src={endImageUrl} alt="End" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center">
-                  <span className="material-symbols-rounded text-xl" style={{ color: "var(--text-muted)" }}>add_photo_alternate</span>
-                  <span className="text-[9px] font-medium" style={{ color: "var(--text-muted)" }}>Kết thúc</span>
-                </div>
-              )}
-              {endImageUrl && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setEndImageId(null); setEndImageUrl(null); }}
-                  className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  style={{ background: "rgba(0,0,0,0.6)" }}
-                >
-                  <span className="material-symbols-rounded text-white" style={{ fontSize: "12px" }}>close</span>
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* ═══ Main prompt area ═══ */}
         <div className="px-4 py-3"
           style={{
@@ -358,8 +291,75 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
             border: generating ? "1.5px solid var(--neon-blue)" : "1.5px solid var(--prompt-border)",
             boxShadow: generating ? "0 0 12px rgba(79,70,229,0.15)" : "0 2px 16px rgba(0,0,0,0.08)",
             backdropFilter: "blur(16px)",
-            borderRadius: "30px",
+            borderRadius: "24px",
           }}>
+
+          {/* ═══ Keyframe frames INSIDE prompt box ═══ */}
+          {isVideo && videoSubTab === "keyframes" && (
+            <div className="flex items-center gap-2.5 mb-3 pb-3" style={{ borderBottom: "1px solid var(--prompt-border)" }}>
+              {/* Start frame */}
+              <div
+                className="relative rounded-xl overflow-hidden cursor-pointer group transition-all shrink-0"
+                style={{
+                  width: 64, height: 64,
+                  border: activeFrame === "start" ? "2px solid var(--neon-blue)" : "2px solid var(--border-subtle)",
+                  background: "var(--bg-tertiary)",
+                  borderRadius: "14px",
+                }}
+                onClick={() => { setActiveFrame("start"); imageUploadRef.current?.click(); }}
+              >
+                {startImageUrl ? (
+                  <img src={startImageUrl} alt="Start" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-0.5">
+                    <span className="material-symbols-rounded" style={{ color: "var(--text-muted)", fontSize: "20px" }}>add_photo_alternate</span>
+                    <span className="text-[8px] font-semibold" style={{ color: "var(--text-muted)" }}>Bắt đầu</span>
+                  </div>
+                )}
+                {startImageUrl && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setStartImageId(null); setStartImageUrl(null); }}
+                    className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ background: "rgba(0,0,0,0.6)" }}
+                  >
+                    <span className="material-symbols-rounded text-white" style={{ fontSize: "10px" }}>close</span>
+                  </button>
+                )}
+              </div>
+
+              <span className="material-symbols-rounded shrink-0" style={{ color: "var(--text-muted)", fontSize: "16px" }}>swap_horiz</span>
+
+              {/* End frame */}
+              <div
+                className="relative rounded-xl overflow-hidden cursor-pointer group transition-all shrink-0"
+                style={{
+                  width: 64, height: 64,
+                  border: activeFrame === "end" ? "2px solid var(--neon-purple)" : "2px solid var(--border-subtle)",
+                  background: "var(--bg-tertiary)",
+                  borderRadius: "14px",
+                }}
+                onClick={() => { setActiveFrame("end"); imageUploadRef.current?.click(); }}
+              >
+                {endImageUrl ? (
+                  <img src={endImageUrl} alt="End" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-0.5">
+                    <span className="material-symbols-rounded" style={{ color: "var(--text-muted)", fontSize: "20px" }}>add_photo_alternate</span>
+                    <span className="text-[8px] font-semibold" style={{ color: "var(--text-muted)" }}>Kết thúc</span>
+                  </div>
+                )}
+                {endImageUrl && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setEndImageId(null); setEndImageUrl(null); }}
+                    className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ background: "rgba(0,0,0,0.6)" }}
+                  >
+                    <span className="material-symbols-rounded text-white" style={{ fontSize: "10px" }}>close</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Image preview (if uploaded in Components mode) */}
           {isVideo && videoSubTab === "components" && startImageUrl && (
