@@ -1,11 +1,10 @@
 """
 API Route — Upload Image
-Upload ảnh TRỰC TIẾP lên Google Flow Labs API → nhận mediaId cho Image-to-Video
-Không qua NanoAI proxy — gọi thẳng aisandbox-pa.googleapis.com
+Upload ảnh lên Google Flow Labs qua NanoAI proxy → nhận mediaId cho Image-to-Video
+Sử dụng proxy_google_request (is_proxy=True) để nhận raw Google response
 """
 import logging
 import base64
-import httpx
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from app.auth import get_current_user
 
@@ -18,7 +17,7 @@ async def upload_image(
     request: Request,
     image: UploadFile = File(...),
 ):
-    """Upload ảnh trực tiếp lên Google aisandbox API → nhận mediaId"""
+    """Upload ảnh lên Google aisandbox qua NanoAI proxy → nhận mediaId"""
     user_data = get_current_user(request)
     user_id = user_data["user_id"]
 
@@ -42,8 +41,7 @@ async def upload_image(
     mime = image.content_type or "image/jpeg"
     b64_image = base64.b64encode(content).decode("utf-8")
 
-    # Call Google's media upload API directly
-    upload_url = "https://aisandbox-pa.googleapis.com/v1/media:upload"
+    # Build upload body for Google's media:upload endpoint
     upload_body = {
         "image": {
             "bytesBase64Encoded": b64_image,
@@ -51,61 +49,69 @@ async def upload_image(
         }
     }
 
-    headers = {
-        "Authorization": f"Bearer {bearer_token}",
-        "Content-Type": "application/json",
-        "Origin": "https://aisandbox-pa.clients6.google.com",
-        "Referer": "https://aisandbox-pa.clients6.google.com/",
-    }
-
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(upload_url, json=upload_body, headers=headers)
-            logger.info(f"📦 Google upload response: status={resp.status_code}, body={resp.text[:500]}")
+        from app.nanoai_client import get_nanoai_client
+        nano = get_nanoai_client()
 
-            if resp.status_code != 200:
-                logger.error(f"❌ Google upload failed: {resp.status_code} - {resp.text[:300]}")
-                raise HTTPException(502, f"Google upload failed: {resp.status_code}")
+        # Use proxy_google_request (is_proxy=True) to get RAW Google response
+        # This forwards directly to Google and returns the response, not a taskId
+        result = await nano.proxy_google_request(
+            flow_auth_token=bearer_token,
+            flow_url="https://aisandbox-pa.googleapis.com/v1/media:upload",
+            body_json=upload_body,
+        )
 
-            result = resp.json()
+        logger.info(f"📦 Upload result: {str(result)[:500]}")
 
-        # Extract mediaId from Google response
-        # Google returns: {"name": "media/XXXXX"} or {"mediaId": "XXXXX"}
+        # Check for NanoAI-level errors
+        if result.get("error"):
+            logger.error(f"❌ NanoAI proxy error: {result['error']}")
+            raise HTTPException(502, f"NanoAI proxy error: {str(result['error'])[:200]}")
+
+        # Extract mediaId from response
         media_id = None
 
         if isinstance(result, dict):
-            # Direct mediaId
+            # Direct fields
             media_id = result.get("mediaId") or result.get("media_id")
 
-            # Google format: {"name": "media/CAMaJDBjXXXX"}
+            # Google format: {"name": "media/XXXXX"}
             name = result.get("name", "")
             if name and not media_id:
-                if name.startswith("media/"):
-                    media_id = name.replace("media/", "")
-                else:
-                    media_id = name
+                media_id = name.replace("media/", "") if name.startswith("media/") else name
 
-            # Nested formats
+            # Check nested: data, result, response
             for key in ["data", "result", "response"]:
                 inner = result.get(key, {})
                 if isinstance(inner, dict) and not media_id:
                     media_id = inner.get("mediaId") or inner.get("media_id")
                     inner_name = inner.get("name", "")
                     if inner_name and not media_id:
-                        media_id = inner_name.replace("media/", "")
+                        media_id = inner_name.replace("media/", "") if inner_name.startswith("media/") else inner_name
+
+            # NanoAI may wrap in success/taskId format — use taskId as fallback
+            if not media_id:
+                task_id = result.get("taskId")
+                if task_id:
+                    # Poll the task to get the actual Google response
+                    logger.info(f"🔄 Got taskId={task_id}, polling for Google response...")
+                    poll_result = await nano.poll_flow_task(task_id, max_polls=10, interval=2)
+                    if poll_result:
+                        logger.info(f"📦 Poll result: {str(poll_result)[:500]}")
+                        media_id = poll_result.get("mediaId") or poll_result.get("media_id")
+                        poll_name = poll_result.get("name", "")
+                        if poll_name and not media_id:
+                            media_id = poll_name.replace("media/", "") if poll_name.startswith("media/") else poll_name
 
         if media_id:
             logger.info(f"✅ Uploaded image: mediaId={media_id[:40]}...")
             return {"success": True, "media_id": media_id}
         else:
-            logger.warning(f"⚠️ Upload OK but no mediaId in response: {str(result)[:500]}")
+            logger.warning(f"⚠️ Upload OK but no mediaId: {str(result)[:500]}")
             return {"success": False, "detail": "Upload thành công nhưng không nhận được mediaId", "raw": str(result)[:300]}
 
-    except httpx.HTTPError as e:
-        logger.error(f"❌ Upload HTTP error: {e}")
-        raise HTTPException(502, f"Lỗi kết nối Google: {str(e)}")
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Upload image error: {e}")
+        logger.error(f"❌ Upload image error: {type(e).__name__}: {e}")
         raise HTTPException(500, f"Lỗi upload: {str(e)}")
