@@ -1,15 +1,21 @@
 """
 API Route — Upload Image
-Upload ảnh lên Google Flow Labs qua NanoAI proxy → nhận mediaId cho Image-to-Video
-Sử dụng proxy_google_request (is_proxy=True) để nhận raw Google response
+Lưu ảnh lên server → trả về URL công khai
+Dùng URL này trong imageUrls khi tạo video/ảnh qua NanoAI V2 API
 """
+import os
 import logging
-import base64
+import uuid
+import time
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from app.auth import get_current_user
 
 logger = logging.getLogger("veo3.route.upload")
 router = APIRouter(prefix="/api", tags=["Upload"])
+
+# Upload directory — served as static files
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 @router.post("/upload-image")
@@ -17,7 +23,7 @@ async def upload_image(
     request: Request,
     image: UploadFile = File(...),
 ):
-    """Upload ảnh lên Google aisandbox qua NanoAI proxy → nhận mediaId"""
+    """Upload ảnh lên server → trả về public URL để dùng làm tham chiếu"""
     user_data = get_current_user(request)
     user_id = user_data["user_id"]
 
@@ -29,89 +35,78 @@ async def upload_image(
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(400, "Ảnh quá lớn (tối đa 10MB)")
 
-    logger.info(f"📤 Upload image: user={user_id}, size={len(content)}, type={image.content_type}")
+    # Determine extension
+    ext_map = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+        "image/gif": ".gif",
+    }
+    ext = ext_map.get(image.content_type, ".jpg")
 
-    # Get account with valid bearer token
-    from app.async_worker import get_account_token
-    account = await get_account_token()
-    if not account:
-        raise HTTPException(503, "Không có tài khoản khả dụng")
+    # Save with unique name
+    filename = f"ref_{user_id}_{uuid.uuid4().hex[:8]}{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
 
-    bearer_token = account["token"]
-    mime = image.content_type or "image/jpeg"
-    b64_image = base64.b64encode(content).decode("utf-8")
+    with open(filepath, "wb") as f:
+        f.write(content)
 
-    # Build upload body for Google's media:upload endpoint
-    upload_body = {
-        "image": {
-            "bytesBase64Encoded": b64_image,
-            "mimeType": mime,
-        }
+    logger.info(f"📤 Upload image: user={user_id}, file={filename}, size={len(content)}")
+
+    # Build public URL
+    # In production: use the domain; in dev: use relative path
+    from app.config import get_settings
+    settings = get_settings()
+
+    # The static files are served at /static/ by FastAPI
+    image_url = f"/static/uploads/{filename}"
+
+    # For NanoAI V2 API, we need a full public URL
+    # Get the host from the request or settings
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    scheme = request.headers.get("x-forwarded-proto") or "https"
+
+    if host:
+        public_url = f"{scheme}://{host}/static/uploads/{filename}"
+    else:
+        public_url = image_url
+
+    logger.info(f"✅ Image saved: {filename}, public_url={public_url}")
+
+    # Cleanup old uploads (keep last 100 files max)
+    _cleanup_old_uploads()
+
+    return {
+        "success": True,
+        "media_id": filename,  # Use filename as the "mediaId" for reference
+        "url": image_url,
+        "public_url": public_url,
     }
 
+
+def _cleanup_old_uploads(max_files: int = 100, max_age_hours: int = 48):
+    """Remove old uploaded files to prevent disk bloat"""
     try:
-        from app.nanoai_client import get_nanoai_client
-        nano = get_nanoai_client()
+        files = []
+        now = time.time()
+        for f in os.listdir(UPLOAD_DIR):
+            fpath = os.path.join(UPLOAD_DIR, f)
+            if os.path.isfile(fpath):
+                mtime = os.path.getmtime(fpath)
+                age_hours = (now - mtime) / 3600
+                files.append((fpath, mtime, age_hours))
 
-        # Use proxy_google_request (is_proxy=True) to get RAW Google response
-        # This forwards directly to Google and returns the response, not a taskId
-        result = await nano.proxy_google_request(
-            flow_auth_token=bearer_token,
-            flow_url="https://aisandbox-pa.googleapis.com/v1/media:upload",
-            body_json=upload_body,
-        )
+        # Remove files older than max_age_hours
+        for fpath, mtime, age in files:
+            if age > max_age_hours:
+                os.remove(fpath)
 
-        logger.info(f"📦 Upload result: {str(result)[:500]}")
-
-        # Check for NanoAI-level errors
-        if result.get("error"):
-            logger.error(f"❌ NanoAI proxy error: {result['error']}")
-            raise HTTPException(502, f"NanoAI proxy error: {str(result['error'])[:200]}")
-
-        # Extract mediaId from response
-        media_id = None
-
-        if isinstance(result, dict):
-            # Direct fields
-            media_id = result.get("mediaId") or result.get("media_id")
-
-            # Google format: {"name": "media/XXXXX"}
-            name = result.get("name", "")
-            if name and not media_id:
-                media_id = name.replace("media/", "") if name.startswith("media/") else name
-
-            # Check nested: data, result, response
-            for key in ["data", "result", "response"]:
-                inner = result.get(key, {})
-                if isinstance(inner, dict) and not media_id:
-                    media_id = inner.get("mediaId") or inner.get("media_id")
-                    inner_name = inner.get("name", "")
-                    if inner_name and not media_id:
-                        media_id = inner_name.replace("media/", "") if inner_name.startswith("media/") else inner_name
-
-            # NanoAI may wrap in success/taskId format — use taskId as fallback
-            if not media_id:
-                task_id = result.get("taskId")
-                if task_id:
-                    # Poll the task to get the actual Google response
-                    logger.info(f"🔄 Got taskId={task_id}, polling for Google response...")
-                    poll_result = await nano.poll_flow_task(task_id, max_polls=10, interval=2)
-                    if poll_result:
-                        logger.info(f"📦 Poll result: {str(poll_result)[:500]}")
-                        media_id = poll_result.get("mediaId") or poll_result.get("media_id")
-                        poll_name = poll_result.get("name", "")
-                        if poll_name and not media_id:
-                            media_id = poll_name.replace("media/", "") if poll_name.startswith("media/") else poll_name
-
-        if media_id:
-            logger.info(f"✅ Uploaded image: mediaId={media_id[:40]}...")
-            return {"success": True, "media_id": media_id}
-        else:
-            logger.warning(f"⚠️ Upload OK but no mediaId: {str(result)[:500]}")
-            return {"success": False, "detail": "Upload thành công nhưng không nhận được mediaId", "raw": str(result)[:300]}
-
-    except HTTPException:
-        raise
+        # If still too many, remove oldest
+        files = [(fp, mt, ag) for fp, mt, ag in files if os.path.exists(fp)]
+        if len(files) > max_files:
+            files.sort(key=lambda x: x[1])  # oldest first
+            for fpath, _, _ in files[:len(files) - max_files]:
+                if os.path.exists(fpath):
+                    os.remove(fpath)
     except Exception as e:
-        logger.error(f"❌ Upload image error: {type(e).__name__}: {e}")
-        raise HTTPException(500, f"Lỗi upload: {str(e)}")
+        logger.warning(f"⚠️ Cleanup error: {e}")

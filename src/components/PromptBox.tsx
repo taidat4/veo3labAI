@@ -265,24 +265,26 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
       });
       const data = await res.json();
       if (data.success && data.media_id) {
-        // Create data URL for persistent preview (blob URLs don't survive refresh)
+        // Server saved image and returned public_url
+        const publicUrl = data.public_url || data.url || "";
+        // Create data URL for local preview in library
         const reader = new FileReader();
         reader.onload = () => {
           const dataUrl = reader.result as string;
-          // Save to library
+          // Save to library — mediaId stores the public_url for generation
           addUploadedImage({
             id: `img-${Date.now()}`,
-            mediaId: data.media_id,
-            url: dataUrl,
+            mediaId: publicUrl, // public URL for NanoAI API
+            url: dataUrl,       // data URL for local preview
             name: file.name,
             uploadedAt: Date.now(),
           });
-          // Set as active reference
+          // Set as active reference — startImageId = public URL
           if (target === "start") {
-            setStartImageId(data.media_id);
+            setStartImageId(publicUrl);
             setStartImageUrl(dataUrl);
           } else {
-            setEndImageId(data.media_id);
+            setEndImageId(publicUrl);
             setEndImageUrl(dataUrl);
           }
         };

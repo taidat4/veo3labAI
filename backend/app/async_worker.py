@@ -592,6 +592,83 @@ async def _process_via_nanoai_v2(
         await fail_job(job_id, user_id, str(e)[:200])
 
 
+async def _poll_v2_task_to_completion(nano, task_id: str, job_id: int, user_id: int, project_id: str, account: dict):
+    """Poll NanoAI V2 task until completion — shared by V2 video gen and I2V flows."""
+    MAX_POLLS = 150  # 10 min
+    for i in range(MAX_POLLS):
+        await asyncio.sleep(settings.POLL_INTERVAL_SECONDS)
+        try:
+            result = await nano.get_v2_task_status(task_id)
+            code = result.get("code", "")
+            success = result.get("success", False)
+
+            if not success and code == "processing":
+                progress = min(5 + i * 2, 90)
+                await update_job(job_id, progress_percent=progress, status="processing")
+                await publish_progress(user_id, job_id, {
+                    "type": "progress", "status": "processing", "progress_percent": progress,
+                })
+                if i % 5 == 0:
+                    logger.info(f"📊 Job {job_id}: {progress}% ({(i+1)*settings.POLL_INTERVAL_SECONDS}s)")
+                continue
+
+            if success:
+                data = result.get("data", {}) or {}
+                media_url = ""
+                media_id = ""
+                v2_project_id = ""
+                if isinstance(data, dict):
+                    media_url = data.get("mediaUrl") or data.get("url") or ""
+                    media_id = data.get("mediaId") or data.get("media_id") or ""
+                    v2_project_id = data.get("projectId") or data.get("project_id") or ""
+
+                if not media_url:
+                    media_url = _find_url_in_data(result) or ""
+
+                if media_url:
+                    final_pid = v2_project_id or project_id
+                    logger.info(f"🎉 Job {job_id} V2 done! URL={media_url[:80]}, mediaId={media_id}, pid={final_pid}")
+                    await update_job(
+                        job_id, status="completed", progress_percent=100,
+                        temp_video_url=media_url, media_id=media_id,
+                        finished_at=datetime.utcnow(),
+                    )
+                    await publish_progress(user_id, job_id, {
+                        "type": "completed", "status": "completed",
+                        "progress_percent": 100, "video_url": media_url,
+                        "media_id": media_id,
+                    })
+                    # Save mediaId + projectId for upscale
+                    async with async_session_factory() as s:
+                        j = (await s.execute(select(GenerationJob).where(GenerationJob.id == job_id))).scalar_one_or_none()
+                        if j:
+                            p = dict(j.params or {})
+                            if media_id:
+                                p["nanoai_media_id"] = media_id
+                            if final_pid:
+                                p["project_id"] = final_pid
+                                p["nanoai_project_id"] = final_pid
+                            j.params = p
+                            await s.commit()
+                    await complete_job(job_id, user_id)
+                    return
+                else:
+                    logger.error(f"🔴 V2 success but no URL: {str(result)[:500]}")
+                    await fail_job(job_id, user_id, "Video created but no URL")
+                    return
+
+            if code in ("error", "failed", "not_found"):
+                err = result.get("message", code)
+                logger.error(f"🔴 V2 task failed: {err}")
+                await report_account_result(account["email"], False, str(err))
+                await fail_job(job_id, user_id, str(err)[:200])
+                return
+
+        except Exception as e:
+            logger.error(f"⚠️ V2 poll error: {e}")
+
+    await fail_job(job_id, user_id, "V2 task timeout — quá 10 phút")
+
 async def _process_via_nanoai(
     job_id: int, user_id: int, prompt: str, aspect_ratio: str, video_model: str,
 ):
@@ -637,15 +714,50 @@ async def _process_via_nanoai(
 
             # Build body: text-to-video or image-to-video
             if start_image_id:
-                i2v_model = "veo_3_1_i2v_s_fast_ultra"
-                body = build_nanoai_i2v_body(
-                    prompt=prompt,
-                    start_image_id=start_image_id,
-                    aspect_ratio=aspect_ratio,
-                    video_model=i2v_model,
-                    project_id=project_id,
-                )
-                logger.info(f"🖼️→🎬 Image-to-Video: imageId={start_image_id[:20]}..., model={i2v_model}")
+                # Check if start_image_id is a URL (our server) vs Google mediaId
+                is_url = start_image_id.startswith("http") or start_image_id.startswith("/static/")
+                if is_url:
+                    # ★ Image hosted on our server → use NanoAI V2 API with imageUrls
+                    from app.veo_template import VIDEO_ASPECT_RATIO_MAP
+                    v2_ar = VIDEO_ASPECT_RATIO_MAP.get(aspect_ratio, "VIDEO_ASPECT_RATIO_LANDSCAPE")
+                    logger.info(f"🖼️→🎬 Image-to-Video (V2 imageUrls): url={start_image_id[:60]}...")
+                    nano = get_nanoai_client()
+                    create_result = await nano.create_video_v2(
+                        access_token=account["token"],
+                        cookie=account.get("cookies", ""),
+                        prompt=prompt,
+                        aspect_ratio=v2_ar,
+                        video_model="VEO_3_GENERATE",
+                        image_urls=[start_image_id],
+                    )
+                    if "error" in create_result and not create_result.get("success"):
+                        error_msg = f"NanoAI V2 I2V: {str(create_result.get('error', ''))[:200]}"
+                        logger.error(f"🔴 V2 I2V error: {error_msg}")
+                        await report_account_result(account["email"], False, error_msg)
+                        await fail_job(job_id, user_id, error_msg)
+                        return
+                    task_id_v2 = create_result.get("taskId") or create_result.get("task_id")
+                    if task_id_v2:
+                        logger.info(f"⏳ V2 I2V taskId: {task_id_v2}")
+                        await report_account_result(account["email"], True)
+                        # Delegate to V2 polling (reuse _process_via_nanoai_v2 polling logic)
+                        await _poll_v2_task_to_completion(nano, task_id_v2, job_id, user_id, project_id, account)
+                        return
+                    else:
+                        logger.error(f"🔴 No V2 taskId: {str(create_result)[:300]}")
+                        await fail_job(job_id, user_id, "NanoAI V2 không trả taskId")
+                        return
+                else:
+                    # Google mediaId → use flow proxy with startImage
+                    i2v_model = "veo_3_1_i2v_s_fast_ultra"
+                    body = build_nanoai_i2v_body(
+                        prompt=prompt,
+                        start_image_id=start_image_id,
+                        aspect_ratio=aspect_ratio,
+                        video_model=i2v_model,
+                        project_id=project_id,
+                    )
+                    logger.info(f"🖼️→🎬 Image-to-Video (mediaId): imageId={start_image_id[:20]}..., model={i2v_model}")
             else:
                 body = build_nanoai_body(
                     prompt=prompt,
@@ -679,8 +791,8 @@ async def _process_via_nanoai(
             # NanoAI handles EVERYTHING (no direct Google calls)
             # ══════════════════════════════════════════════════════
             nano = get_nanoai_client()
-            # Use different Google endpoint for image-to-video
-            i2v_flow_url = "https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartImage" if start_image_id else ""
+            # Use different Google endpoint for image-to-video (Google mediaId path)
+            i2v_flow_url = "https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartImage" if (start_image_id and not start_image_id.startswith("http") and not start_image_id.startswith("/static/")) else ""
             create_result = await nano.create_flow(
                 flow_auth_token=account["token"],
                 body_json=body,
