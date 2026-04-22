@@ -380,6 +380,34 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
 
           {/* Header row with textarea and button */}
           <div className="flex items-end gap-3">
+            {/* Upload image (+) button — LEFT side like Flow Labs */}
+            <input
+              ref={imageUploadRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => handleImageUpload(e, activeFrame)}
+            />
+            {isVideo && videoSubTab === "components" && (
+              <button
+                onClick={() => { setActiveFrame("start"); imageUploadRef.current?.click(); }}
+                className="shrink-0 flex items-center justify-center rounded-full transition-all hover:scale-105"
+                title="Tải ảnh tham chiếu"
+                style={{
+                  width: 40, height: 40,
+                  border: "2px solid var(--border-subtle)",
+                  background: "var(--bg-tertiary)",
+                  color: uploadingImage ? "var(--text-muted)" : "var(--text-secondary)",
+                }}
+                disabled={uploadingImage}
+              >
+                {uploadingImage ? (
+                  <span className="spinner !w-5 !h-5 !border-current/20 !border-t-current"></span>
+                ) : (
+                  <span className="material-symbols-rounded" style={{ fontSize: "22px" }}>add</span>
+                )}
+              </button>
+            )}
             <div className="flex-1 min-w-0">
               <textarea
                 ref={textareaRef}
@@ -400,31 +428,8 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
                 disabled={generating}
               />
             </div>
-            {/* Quick actions */}
+            {/* Quick actions — RIGHT side */}
             <div className="flex items-center gap-1.5 shrink-0">
-              {/* Upload image (+) button */}
-              <input
-                ref={imageUploadRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => handleImageUpload(e, activeFrame)}
-              />
-              {isVideo && (
-                <button
-                  onClick={() => { setActiveFrame("start"); imageUploadRef.current?.click(); }}
-                  className="btn-ghost !p-1.5 !rounded-lg"
-                  title="Tải ảnh tham chiếu"
-                  style={{ color: uploadingImage ? "var(--text-muted)" : "var(--text-secondary)" }}
-                  disabled={uploadingImage}
-                >
-                  {uploadingImage ? (
-                    <span className="spinner !w-4 !h-4 !border-current/20 !border-t-current"></span>
-                  ) : (
-                    <span className="material-symbols-rounded text-lg">add</span>
-                  )}
-                </button>
-              )}
               <button
                 onClick={() => setPrompt(magicPrompts[Math.floor(Math.random() * magicPrompts.length)])}
                 className="btn-ghost !p-1.5 !rounded-lg"
