@@ -49,6 +49,7 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageUploadRef = useRef<HTMLInputElement>(null);
+  const keyframeInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   // Fetch credit costs from admin settings
@@ -332,6 +333,15 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
             borderRadius: "24px",
           }}>
 
+          {/* Hidden file input for keyframe uploads — always in DOM */}
+          <input
+            ref={keyframeInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => handleImageUpload(e, activeFrame)}
+          />
+
           {/* ═══ Keyframe frames INSIDE prompt box ═══ */}
           {isVideo && videoSubTab === "keyframes" && (
             <div className="flex items-center gap-2.5 mb-3 pb-3" style={{ borderBottom: "1px solid var(--prompt-border)" }}>
@@ -344,7 +354,7 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
                   background: "var(--bg-tertiary)",
                   borderRadius: "14px",
                 }}
-                onClick={() => { setActiveFrame("start"); imageUploadRef.current?.click(); }}
+                onClick={() => { setActiveFrame("start"); setTimeout(() => keyframeInputRef.current?.click(), 50); }}
               >
                 {startImageUrl ? (
                   <img src={startImageUrl} alt="Start" className="w-full h-full object-cover" />
@@ -376,7 +386,7 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
                   background: "var(--bg-tertiary)",
                   borderRadius: "14px",
                 }}
-                onClick={() => { setActiveFrame("end"); imageUploadRef.current?.click(); }}
+                onClick={() => { setActiveFrame("end"); setTimeout(() => keyframeInputRef.current?.click(), 50); }}
               >
                 {endImageUrl ? (
                   <img src={endImageUrl} alt="End" className="w-full h-full object-cover" />
