@@ -138,7 +138,7 @@ async def update_job(job_id: int, **kwargs):
 
 
 async def get_account_token(exclude_emails: list[str] | None = None) -> dict | None:
-    """Get healthy account with token"""
+    """Get healthy account with token — load balanced by usage_count (least used first)"""
     async with async_session_factory() as session:
         query = (
             select(UltraAccount)
@@ -147,7 +147,7 @@ async def get_account_token(exclude_emails: list[str] | None = None) -> dict | N
                 UltraAccount.status == "healthy",
                 UltraAccount.bearer_token.isnot(None),
             )
-            .order_by(UltraAccount.health_score.desc(), UltraAccount.usage_count.asc())
+            .order_by(UltraAccount.usage_count.asc(), UltraAccount.health_score.desc())
         )
         result = await session.execute(query)
         accounts = result.scalars().all()
@@ -160,10 +160,16 @@ async def get_account_token(exclude_emails: list[str] | None = None) -> dict | N
     if not candidates:
         candidates = accounts
 
-    # Round-robin via Redis
+    # Select account with LEAST usage (first in sorted list) — ensures even distribution
+    # Round-robin within same-usage-count accounts
     redis = await get_redis()
-    idx = int(await redis.incr("veo3:worker_rr") or 0)
-    selected = candidates[idx % len(candidates)]
+    if len(candidates) > 1:
+        min_usage = candidates[0].usage_count or 0
+        same_usage = [a for a in candidates if (a.usage_count or 0) == min_usage]
+        idx = int(await redis.incr("veo3:worker_rr") or 0)
+        selected = same_usage[idx % len(same_usage)]
+    else:
+        selected = candidates[0]
 
     # Token from Redis cache or DB
     token = await redis.get(f"veo3:token:{selected.email}")
@@ -172,6 +178,8 @@ async def get_account_token(exclude_emails: list[str] | None = None) -> dict | N
 
     if not token:
         return None
+
+    logger.info(f"🎯 Selected account #{selected.id} (usage={selected.usage_count})")
 
     return {
         "email": selected.email,
@@ -928,7 +936,7 @@ async def _process_via_nanoai(
                                 err_code = err_info.get("code", 0) if isinstance(err_info, dict) else 0
                                 err_status = err_info.get("status", "") if isinstance(err_info, dict) else ""
                                 if err_code == 401 or err_status == "UNAUTHENTICATED":
-                                    logger.error(f"🔴 Token expired (401) for {account['email']} — disabling account")
+                                    logger.error(f"🔴 Token expired (401) for account #{account.get('account_id', '?')} — disabling")
                                     await report_account_result(account["email"], False, "Token 401 UNAUTHENTICATED")
                                     # Disable account to prevent future failures
                                     try:
@@ -938,10 +946,10 @@ async def _process_via_nanoai(
                                             if acc:
                                                 acc.is_active = False
                                                 await s.commit()
-                                                logger.info(f"🚫 Account {account['email']} disabled due to 401")
+                                                logger.info(f"🚫 Account #{account.get('account_id', '?')} disabled due to 401")
                                     except Exception as e:
                                         logger.warning(f"⚠️ Failed to disable account: {e}")
-                                    await fail_job(job_id, user_id, f"Token hết hạn ({account['email']}) — vui lòng thử lại")
+                                    await fail_job(job_id, user_id, "Token hết hạn — admin sẽ sớm cập nhật. Vui lòng thử lại sau.")
                                     return
                             logger.error(f"🔴 Task success but no URL: {json.dumps(task_result)[:500]}")
                             await fail_job(job_id, user_id, "Video created but no URL returned")
@@ -1128,7 +1136,7 @@ async def poll_video_status(
             if resp.status_code == 401:
                 consecutive_errors += 1
                 if consecutive_errors >= 5:
-                    await fail_job(job_id, user_id, "Token expired during polling")
+                    await fail_job(job_id, user_id, "Token hết hạn — admin sẽ sớm cập nhật. Vui lòng thử lại sau.")
                     return
                 continue
 
