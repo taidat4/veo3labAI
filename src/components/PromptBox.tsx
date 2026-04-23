@@ -91,6 +91,8 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
   const [uploadingImage, setUploadingImage] = useState(false);
   const [activeFrame, setActiveFrame] = useState<"start" | "end">("start");
   const [showLibrary, setShowLibrary] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
 
   const isVideo = mediaTab === "video";
   const currentModel = isVideo
@@ -306,6 +308,87 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
     }
   };
 
+  // ── Drag & Drop image upload directly into prompt box ──
+  const processDroppedFile = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      showToast("Chỉ hỗ trợ file ảnh", "error");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showToast("Ảnh quá lớn (tối đa 10MB)", "error");
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const token = localStorage.getItem("veo3_token");
+      const res = await fetch("/api/upload-image", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success && data.media_id) {
+        const publicUrl = data.public_url || data.url || "";
+        const previewUrl = data.url || publicUrl;
+        addUploadedImage({
+          id: `img-${Date.now()}`,
+          mediaId: publicUrl,
+          url: previewUrl,
+          name: file.name,
+          uploadedAt: Date.now(),
+        });
+        setStartImageId(publicUrl);
+        setStartImageUrl(previewUrl);
+        showToast(`✅ Đã tải ảnh "${file.name}" lên!`, "success");
+        setShowLibrary(false);
+      } else {
+        showToast(data.detail || "Lỗi upload ảnh", "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Lỗi upload ảnh", "error");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.types.includes("Files")) {
+      setIsDragging(true);
+    }
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const imageFile = Array.from(files).find(f => f.type.startsWith("image/"));
+      if (imageFile) {
+        processDroppedFile(imageFile);
+      } else {
+        showToast("Chỉ hỗ trợ file ảnh", "error");
+      }
+    }
+  };
+
   // Select image from library
   const selectFromLibrary = (img: { mediaId: string; url: string }) => {
     if (activeFrame === "start") {
@@ -323,15 +406,30 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
     <>
       <div className="flex flex-col gap-3 w-full fade-in" style={{ padding: "0 300px" }}>
 
-        {/* ═══ Main prompt area ═══ */}
-        <div className="px-4 py-3"
+        {/* ═══ Main prompt area — supports drag & drop images ═══ */}
+        <div className={`px-4 py-3 transition-all ${isDragging ? 'ring-2 ring-blue-400' : ''}`}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
           style={{
-            background: "var(--prompt-bg)",
-            border: generating ? "1.5px solid var(--neon-blue)" : "1.5px solid var(--prompt-border)",
-            boxShadow: generating ? "0 0 12px rgba(79,70,229,0.15)" : "0 2px 16px rgba(0,0,0,0.08)",
+            background: isDragging ? "rgba(59,130,246,0.08)" : "var(--prompt-bg)",
+            border: isDragging ? "2px dashed #3b82f6" : generating ? "1.5px solid var(--neon-blue)" : "1.5px solid var(--prompt-border)",
+            boxShadow: isDragging ? "0 0 20px rgba(59,130,246,0.15)" : generating ? "0 0 12px rgba(79,70,229,0.15)" : "0 2px 16px rgba(0,0,0,0.08)",
             backdropFilter: "blur(16px)",
             borderRadius: "24px",
+            position: "relative",
           }}>
+
+          {/* Drag overlay */}
+          {isDragging && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-3xl z-10" style={{ background: "rgba(59,130,246,0.06)" }}>
+              <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "#3b82f6" }}>
+                <span className="material-symbols-rounded text-2xl">add_photo_alternate</span>
+                Thả ảnh vào đây để tải lên
+              </div>
+            </div>
+          )}
 
           {/* Hidden file input for keyframe uploads — always in DOM */}
           <input

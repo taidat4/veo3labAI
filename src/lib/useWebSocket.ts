@@ -58,11 +58,14 @@ export function useWebSocket() {
               status: "failed",
               error: data.error,
             });
-            showToast(`❌ ${data.error || (isImgFail ? "Tạo ảnh thất bại" : "Tạo video thất bại")}`, "error");
+            const errMsg = data.error || (isImgFail ? "Tạo ảnh thất bại" : "Tạo video thất bại");
+            const promptSnip = failedJob?.prompt ? ` — "${failedJob.prompt.slice(0, 40)}..."` : "";
+            showToast(`❌ ${errMsg}${promptSnip}`, "error");
             // Refresh history so failed job shows in history
             const refreshFn2 = useStore.getState().onRefreshHistory;
             if (refreshFn2) refreshFn2();
-            setTimeout(() => removeActiveJob(data.job_id), 3000);
+            // Keep failed card visible for 15s so user can read the error
+            setTimeout(() => removeActiveJob(data.job_id), 15000);
           }
         } catch (e) {
           console.error("[WS] Parse error:", e);

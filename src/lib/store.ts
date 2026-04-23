@@ -310,7 +310,9 @@ export const useStore = create<AppStore>((set, get) => ({
   toast: null,
   showToast: (message, type = "info") => {
     set({ toast: { message, type } });
-    setTimeout(() => set({ toast: null }), 4000);
+    // Error toasts stay longer so users can read the details
+    const duration = type === "error" ? 8000 : 4000;
+    setTimeout(() => set({ toast: null }), duration);
   },
   clearToast: () => set({ toast: null }),
 

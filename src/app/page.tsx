@@ -160,7 +160,8 @@ export default function HomePage() {
               status: "failed", error: apiJob.error || "Thất bại",
             });
             useStore.getState().showToast(`❌ ${apiJob.error || "Tạo thất bại"}`, "error");
-            setTimeout(() => useStore.getState().removeActiveJob(jobId), 3000);
+            // Keep failed card visible for 15s so user can read the error
+            setTimeout(() => useStore.getState().removeActiveJob(jobId), 15000);
           } else if (apiJob.progress_percent) {
             useStore.getState().updateActiveJob(jobId, {
               progress: apiJob.progress_percent, status: apiJob.status,
