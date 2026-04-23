@@ -6,6 +6,11 @@ export const metadata: Metadata = {
   title: "Veo3Lab — AI Video Generate",
   description: "Tạo video AI chất lượng cao với Veo 3.1 — Nhanh, đẹp, dễ dùng",
   icons: { icon: "/favicon.png", apple: "/favicon.png" },
+  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no",
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export default function RootLayout({

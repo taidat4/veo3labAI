@@ -15,6 +15,8 @@ import { PromptBox } from "@/components/PromptBox";
 import { ActiveJobCard } from "@/components/ProgressCircle";
 import { VideoCard } from "@/components/VideoCard";
 import { Toast } from "@/components/Toast";
+import { MobileLayout } from "@/components/MobileLayout";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 const GRID_MODES = [
   { cols: 2, icon: "grid_on", label: "2 cột" },
@@ -37,6 +39,7 @@ export default function HomePage() {
   const storeMediaTab = useStore((s) => s.mediaTab); // "video" | "image" from sidebar
   const [contentFilter, setContentFilter] = useState<"all" | "video" | "image">(storeMediaTab);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const isMobile = useIsMobile();
 
   const toggleSelect = (id: number) => {
     setSelectedIds(prev => {
@@ -212,6 +215,20 @@ export default function HomePage() {
   return (
     <div className="min-h-screen" style={{ background: "var(--bg-primary)" }}>
       <Toast />
+
+      {/* ═══ MOBILE LAYOUT — completely separate from desktop ═══ */}
+      <MobileLayout
+        activeJobList={activeJobList}
+        completedJobs={completedJobs}
+        allCompleted={allCompleted}
+        videoCount={videoCount}
+        imageCount={imageCount}
+        contentFilter={contentFilter}
+        setContentFilter={setContentFilter}
+      />
+
+      {/* ═══ DESKTOP LAYOUT — hidden on mobile via CSS ═══ */}
+      <div className="desktop-layout">
       <Navbar />
 
       <main style={{ paddingTop: 72, paddingLeft: 20, paddingRight: 20, paddingBottom: 20 }}>
@@ -489,6 +506,7 @@ export default function HomePage() {
           </div>
         </div>
       </main>
+      </div>{/* end .desktop-layout */}
     </div>
   );
 }
