@@ -51,12 +51,27 @@ export default function ImagesPage() {
         }
         const savedGrid = localStorage.getItem("veo3_grid_cols_images");
         if (savedGrid) setGridCols(parseInt(savedGrid));
-    }, [router, setUser]);
+
+        // ── Load cached history instantly from localStorage ──
+        try {
+            const cached = localStorage.getItem("veo3_history_cache");
+            if (cached) {
+                const jobs = JSON.parse(cached);
+                if (Array.isArray(jobs) && jobs.length > 0) {
+                    setHistory(jobs);
+                    setLoading(false);
+                }
+            }
+        } catch { }
+    }, [router, setUser, setHistory]);
 
     const fetchAll = useCallback(async () => {
         try {
-            const data = await api.getJobs(200);
-            setHistory(data.jobs || []);
+            const data = await api.getJobs(80);
+            const jobs = data.jobs || [];
+            setHistory(jobs);
+            // Cache for instant next load
+            try { localStorage.setItem("veo3_history_cache", JSON.stringify(jobs)); } catch { }
         } catch { } finally {
             setLoading(false);
         }
@@ -400,10 +415,12 @@ function ImageCard({
             <div className="relative aspect-square bg-black overflow-hidden cursor-pointer"
                 onClick={() => setShowPreview(true)}>
                 <img
-                    src={imageUrl}
+                    src={job.thumbnail_url || imageUrl}
                     alt={job.prompt}
                     className="w-full h-full object-cover"
                     loading="lazy"
+                    decoding="async"
+                    fetchPriority="low"
                 />
 
                 {/* Hover overlay */}
@@ -427,18 +444,18 @@ function ImageCard({
             <div className={compact ? "p-2" : "p-3"}>
                 <p className={`font-medium truncate mb-1.5 ${compact ? 'text-xs' : 'text-sm'}`} style={{ color: "var(--text-primary)" }}>{job.prompt}</p>
 
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                <div className="flex items-center gap-2 flex-wrap" style={{ minHeight: "28px" }}>
+                    <div className="flex items-center gap-2 text-xs shrink-0" style={{ color: "var(--text-muted)" }}>
                         <span>{new Date(job.created_at).toLocaleDateString("vi-VN")}</span>
                         <span>·</span>
                         <span>{job.cost.toLocaleString()} credits</span>
                     </div>
 
-                    {/* Download button */}
+                    {/* Download button — always visible, never overflow hidden */}
                     {!compact && (
                         <button
                             onClick={(e) => { e.stopPropagation(); handleDownload(); }}
-                            className="btn-ghost !p-1.5 !rounded-lg"
+                            className="btn-ghost !p-1.5 !rounded-lg ml-auto shrink-0"
                             style={{ color: "var(--neon-blue)" }}
                         >
                             <span className="material-symbols-rounded text-lg">download</span>

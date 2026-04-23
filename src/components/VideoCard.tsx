@@ -419,10 +419,12 @@ export function VideoCard({ job, compact = false, selectable = false, selected =
           {/* Render image or video */}
           {isImage ? (
             <img
-              src={mediaUrl}
+              src={job.thumbnail_url || mediaUrl}
               alt={job.prompt}
               className="w-full h-full object-cover"
               loading="lazy"
+              decoding="async"
+              fetchPriority="low"
             />
           ) : (
             <video
