@@ -42,6 +42,9 @@ async def lifespan(app: FastAPI):
     # Auto-migrate: add new columns to existing DB
     await _auto_migrate()
 
+    # Ensure admin user exists and password is valid with current JWT_SECRET
+    await _ensure_admin_user()
+
     redis = await get_redis()
     logger.info(f"[OK] Redis: {type(redis).__name__}")
 
@@ -181,6 +184,56 @@ async def _r2_backfill_existing():
 
     except Exception as e:
         logger.warning(f"[R2-BACKFILL] Error: {e}")
+
+
+async def _ensure_admin_user():
+    """
+    Ensure admin user exists and password hash is valid with CURRENT JWT_SECRET.
+    
+    Why: hash_password() uses JWT_SECRET as salt. If JWT_SECRET changes between deploys
+    (e.g. Railway redeploy), ALL password hashes become invalid → nobody can login.
+    This function re-hashes admin password on every startup to guarantee login works.
+    """
+    from app.database import async_session_factory
+    from app.models import User
+    from app.auth import hash_password, verify_password
+    from sqlalchemy import select
+    import secrets
+
+    ADMIN_USERNAME = "admin"
+    ADMIN_PASSWORD = "admin"
+
+    try:
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(User).where(User.username == ADMIN_USERNAME)
+            )
+            admin = result.scalar_one_or_none()
+
+            if admin is None:
+                # Create admin user
+                admin = User(
+                    username=ADMIN_USERNAME,
+                    password_hash=hash_password(ADMIN_PASSWORD),
+                    role="admin",
+                    balance=999999,
+                    credits=999999,
+                    api_key=f"veo3_{secrets.token_hex(24)}",
+                )
+                session.add(admin)
+                await session.commit()
+                logger.info("[SEED] Admin user created (admin/admin)")
+            else:
+                # Verify password still works with current JWT_SECRET
+                if not verify_password(ADMIN_PASSWORD, admin.password_hash):
+                    # JWT_SECRET changed → re-hash password
+                    admin.password_hash = hash_password(ADMIN_PASSWORD)
+                    await session.commit()
+                    logger.info("[FIX] Admin password re-hashed (JWT_SECRET changed)")
+                else:
+                    logger.info("[OK] Admin user verified")
+    except Exception as e:
+        logger.warning(f"[SEED] Admin user check failed: {e}")
 
 
 async def _auto_migrate():
