@@ -258,10 +258,6 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
       showToast("Chỉ hỗ trợ file ảnh", "error");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      showToast("Ảnh quá lớn (tối đa 10MB)", "error");
-      return;
-    }
 
     setUploadingImage(true);
     try {
@@ -312,10 +308,6 @@ export function PromptBox({ onRefreshHistory }: { onRefreshHistory: () => void }
   const processDroppedFile = async (file: File) => {
     if (!file.type.startsWith("image/")) {
       showToast("Chỉ hỗ trợ file ảnh", "error");
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      showToast("Ảnh quá lớn (tối đa 10MB)", "error");
       return;
     }
     setUploadingImage(true);

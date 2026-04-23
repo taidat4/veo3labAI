@@ -574,7 +574,7 @@ async def _upload_image_via_nanoai_proxy(image_url: str, token: str, project_id:
         file_size = len(image_bytes)
         logger.info(f"📥 Downloaded image for proxy upload: {file_size} bytes, type={content_type}")
 
-        if file_size > 10 * 1024 * 1024:  # 10MB limit
+        if file_size > 50 * 1024 * 1024:  # 50MB limit
             logger.error(f"🔴 Image too large: {file_size} bytes")
             return None
 

@@ -34,8 +34,8 @@ async def upload_image(
         raise HTTPException(400, "Chỉ hỗ trợ file ảnh")
 
     content = await image.read()
-    if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(400, "Ảnh quá lớn (tối đa 10MB)")
+    if len(content) > 50 * 1024 * 1024:
+        raise HTTPException(400, "Ảnh quá lớn (tối đa 50MB)")
 
     # Determine extension
     ext_map = {
