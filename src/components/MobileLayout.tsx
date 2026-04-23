@@ -5,10 +5,10 @@
  * Layout: 
  *   - Top: Compact navbar (logo + credits + menu)
  *   - Middle: Scrollable content (active jobs + media grid)
- *   - Bottom: Fixed prompt input bar
+ *   - Bottom: Fixed prompt input bar with image upload
  */
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useStore, type HistoryJob } from "@/lib/store";
 import { api } from "@/lib/api";
@@ -36,11 +36,75 @@ export function MobileLayout({
   const showToast = useStore((s) => s.showToast);
   const [showSettings, setShowSettings] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
 
   // ── Prompt state (local — not in store) ──
   const [prompt, setPrompt] = useState("");
   const mediaTab = useStore((s) => s.mediaTab);
   const setMediaTab = useStore((s) => s.setMediaTab);
+
+  // ── Image upload state ──
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const startImageId = useStore((s) => s.startImageId);
+  const startImageUrl = useStore((s) => s.startImageUrl);
+  const setStartImageId = useStore((s) => s.setStartImageId);
+  const setStartImageUrl = useStore((s) => s.setStartImageUrl);
+  const uploadedImages = useStore((s) => s.uploadedImages);
+  const addUploadedImage = useStore((s) => s.addUploadedImage);
+  const removeUploadedImage = useStore((s) => s.removeUploadedImage);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  // ── Image upload handler ──
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Chỉ hỗ trợ file ảnh", "error");
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const token = localStorage.getItem("veo3_token");
+      const res = await fetch("/api/upload-image", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success && data.media_id) {
+        const publicUrl = data.public_url || data.url || "";
+        const previewUrl = data.url || publicUrl;
+        addUploadedImage({
+          id: `img-${Date.now()}`,
+          mediaId: publicUrl,
+          url: previewUrl,
+          name: file.name,
+          uploadedAt: Date.now(),
+        });
+        setStartImageId(publicUrl);
+        setStartImageUrl(previewUrl);
+        showToast(`✅ Đã tải ảnh lên!`, "success");
+        setShowLibrary(false);
+      } else {
+        showToast(data.detail || "Lỗi upload ảnh", "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Lỗi upload ảnh", "error");
+    } finally {
+      setUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  };
+
+  // ── Select from library ──
+  const selectFromLibrary = (img: { mediaId: string; url: string }) => {
+    setStartImageId(img.mediaId);
+    setStartImageUrl(img.url);
+    setShowLibrary(false);
+    showToast("✅ Đã chọn ảnh!", "success");
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return showToast("Nhập prompt trước!", "error");
@@ -51,20 +115,31 @@ export function MobileLayout({
         aspect_ratio: store.aspectRatio,
         number_of_outputs: store.numberOfOutputs,
         video_model: store.mediaTab === "video" ? store.videoModel : store.imageModel,
+        ...(store.startImageId ? { start_image_id: store.startImageId } : {}),
       });
-      if (resp.jobs) {
-        for (const job of resp.jobs) {
+      if (resp.success) {
+        const allIds: number[] = resp.job_ids || [resp.job_id];
+        allIds.forEach((jid: number) => {
           store.addActiveJob({
-            id: job.id,
+            id: jid,
             prompt: prompt,
             status: "queued",
             progress: 0,
             mediaType: store.mediaTab,
             startedAt: Date.now(),
           });
+        });
+        if (resp.remaining_balance !== undefined) {
+          const u = store.user;
+          if (u) store.setUser({ ...u, credits: resp.remaining_balance });
         }
         showToast(`🚀 Đang tạo ${store.mediaTab === "image" ? "ảnh" : "video"}...`, "success");
         setPrompt("");
+        // Clear reference image after generation
+        if (store.startImageId) {
+          setStartImageId(null);
+          setStartImageUrl(null);
+        }
       }
     } catch (err: any) {
       showToast(`❌ ${err?.message || "Lỗi tạo"}`, "error");
@@ -73,6 +148,15 @@ export function MobileLayout({
 
   return (
     <div className="mobile-app">
+      {/* Hidden file input for image upload */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageUpload}
+      />
+
       {/* ═══ MOBILE NAVBAR ═══ */}
       <header className="mobile-navbar">
         <div className="flex items-center gap-2">
@@ -139,6 +223,89 @@ export function MobileLayout({
         <MobileSettingsSheet onClose={() => setShowSettings(false)} />
       )}
 
+      {/* ═══ MOBILE IMAGE LIBRARY BOTTOM SHEET ═══ */}
+      {showLibrary && (
+        <>
+          <div className="mobile-overlay" onClick={() => setShowLibrary(false)} />
+          <div className="mobile-bottom-sheet" style={{ maxHeight: "80vh" }}>
+            <div className="mobile-sheet-handle" />
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                📷 Thư viện ảnh
+              </h3>
+              <button onClick={() => setShowLibrary(false)} className="mobile-icon-btn" style={{ width: 28, height: 28 }}>
+                <span className="material-symbols-rounded" style={{ fontSize: 18 }}>close</span>
+              </button>
+            </div>
+
+            {/* Upload button */}
+            <button
+              onClick={() => imageInputRef.current?.click()}
+              disabled={uploadingImage}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl mb-4 text-sm font-medium transition-all"
+              style={{
+                border: "2px dashed var(--border-subtle)",
+                background: "var(--bg-tertiary)",
+                color: "var(--text-secondary)",
+              }}
+            >
+              {uploadingImage ? (
+                <span className="spinner !w-4 !h-4" />
+              ) : (
+                <span className="material-symbols-rounded" style={{ fontSize: 20 }}>add_photo_alternate</span>
+              )}
+              {uploadingImage ? "Đang tải..." : "Tải ảnh từ thiết bị"}
+            </button>
+
+            {/* Image grid */}
+            {uploadedImages.length > 0 ? (
+              <div className="grid grid-cols-3 gap-2 overflow-y-auto" style={{ maxHeight: "50vh" }}>
+                {uploadedImages.map((img) => (
+                  <div
+                    key={img.id}
+                    className="relative rounded-xl overflow-hidden cursor-pointer group"
+                    style={{
+                      aspectRatio: "1",
+                      background: "var(--bg-tertiary)",
+                      border: startImageId === img.mediaId ? "2px solid var(--neon-blue)" : "1px solid var(--border-subtle)",
+                    }}
+                    onClick={() => selectFromLibrary(img)}
+                  >
+                    <img src={img.url} alt={img.name} className="w-full h-full object-cover" loading="lazy" />
+                    {/* Selected check */}
+                    {startImageId === img.mediaId && (
+                      <div className="absolute top-1 left-1 w-5 h-5 rounded-full flex items-center justify-center"
+                        style={{ background: "var(--neon-blue)" }}>
+                        <span className="material-symbols-rounded text-white" style={{ fontSize: 14 }}>check</span>
+                      </div>
+                    )}
+                    {/* Delete */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); removeUploadedImage(img.id); }}
+                      className="absolute top-1 right-1 w-6 h-6 rounded-full flex items-center justify-center"
+                      style={{ background: "rgba(0,0,0,0.6)" }}
+                    >
+                      <span className="material-symbols-rounded text-white" style={{ fontSize: 14 }}>delete</span>
+                    </button>
+                    {/* Name */}
+                    <div className="absolute bottom-0 left-0 right-0 px-1.5 py-0.5"
+                      style={{ background: "linear-gradient(transparent, rgba(0,0,0,0.7))" }}>
+                      <p className="text-[9px] text-white truncate">{img.name}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center py-8 gap-2">
+                <span className="material-symbols-rounded" style={{ fontSize: 40, color: "var(--text-muted)" }}>photo_library</span>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Chưa có ảnh nào</p>
+                <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Tải ảnh lên để dùng image-to-video/image</p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* ═══ MOBILE CONTENT ═══ */}
       <div className="mobile-content">
         {/* Media tabs */}
@@ -194,38 +361,76 @@ export function MobileLayout({
 
       {/* ═══ MOBILE PROMPT BAR (fixed bottom) ═══ */}
       <div className="mobile-prompt-bar">
-        {/* Type toggle */}
-        <button
-          onClick={() => setMediaTab(mediaTab === "video" ? "image" : "video")}
-          className="mobile-type-toggle"
-          title={mediaTab === "video" ? "Video" : "Ảnh"}
-        >
-          <span className="material-symbols-rounded" style={{ fontSize: 20 }}>
-            {mediaTab === "video" ? "movie" : "image"}
-          </span>
-        </button>
-        <input
-          type="text"
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleGenerate(); } }}
-          placeholder={mediaTab === "video" ? "Mô tả video..." : "Mô tả ảnh..."}
-          className="mobile-prompt-input"
-        />
-        <button
-          onClick={() => setShowSettings(true)}
-          className="mobile-icon-btn"
-          style={{ color: "var(--text-muted)" }}
-        >
-          <span className="material-symbols-rounded" style={{ fontSize: 20 }}>tune</span>
-        </button>
-        <button
-          onClick={handleGenerate}
-          disabled={!prompt.trim()}
-          className="mobile-generate-btn"
-        >
-          <span className="material-symbols-rounded" style={{ fontSize: 20 }}>send</span>
-        </button>
+        {/* Image preview strip — shown when image is selected */}
+        {startImageUrl && (
+          <div className="mobile-image-preview">
+            <img src={startImageUrl} alt="Ref" className="mobile-preview-thumb" />
+            <span className="text-[10px] flex-1 truncate" style={{ color: "var(--text-muted)" }}>📷 Ảnh tham chiếu</span>
+            <button
+              onClick={() => { setStartImageId(null); setStartImageUrl(null); }}
+              className="mobile-preview-remove"
+            >
+              <span className="material-symbols-rounded" style={{ fontSize: 14 }}>close</span>
+            </button>
+          </div>
+        )}
+
+        <div className="mobile-prompt-row">
+          {/* Image upload button (+ icon) */}
+          <button
+            onClick={() => setShowLibrary(true)}
+            className="mobile-type-toggle"
+            title="Thư viện ảnh"
+            style={{
+              color: startImageId ? "var(--neon-blue)" : "var(--text-muted)",
+              borderColor: startImageId ? "var(--neon-blue)" : "var(--border-subtle)",
+            }}
+          >
+            {uploadingImage ? (
+              <span className="spinner !w-4 !h-4" />
+            ) : (
+              <span className="material-symbols-rounded" style={{ fontSize: 20 }}>
+                {startImageId ? "image" : "add_photo_alternate"}
+              </span>
+            )}
+          </button>
+
+          {/* Type toggle */}
+          <button
+            onClick={() => setMediaTab(mediaTab === "video" ? "image" : "video")}
+            className="mobile-type-toggle"
+            title={mediaTab === "video" ? "Video" : "Ảnh"}
+          >
+            <span className="material-symbols-rounded" style={{ fontSize: 20 }}>
+              {mediaTab === "video" ? "movie" : "image"}
+            </span>
+          </button>
+
+          <input
+            type="text"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleGenerate(); } }}
+            placeholder={mediaTab === "video" ? "Mô tả video..." : "Mô tả ảnh..."}
+            className="mobile-prompt-input"
+          />
+
+          <button
+            onClick={() => setShowSettings(true)}
+            className="mobile-icon-btn"
+            style={{ color: "var(--text-muted)", width: 32, height: 32 }}
+          >
+            <span className="material-symbols-rounded" style={{ fontSize: 18 }}>tune</span>
+          </button>
+
+          <button
+            onClick={handleGenerate}
+            disabled={!prompt.trim()}
+            className="mobile-generate-btn"
+          >
+            <span className="material-symbols-rounded" style={{ fontSize: 20 }}>send</span>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -346,7 +551,7 @@ function MobileSettingsSheet({ onClose }: { onClose: () => void }) {
         <div className="mb-4">
           <label className="text-xs font-medium mb-2 block" style={{ color: "var(--text-muted)" }}>Tỷ lệ</label>
           <div className="flex gap-2 flex-wrap">
-            {(["16:9", "9:16", "1:1"] as const).map((ar) => (
+            {(["16:9", "9:16", "1:1", "4:3", "3:4"] as const).map((ar) => (
               <button
                 key={ar}
                 onClick={() => setAspectRatio(ar)}
@@ -358,23 +563,21 @@ function MobileSettingsSheet({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        {/* Number of videos */}
-        {mediaTab === "video" && (
-          <div className="mb-4">
-            <label className="text-xs font-medium mb-2 block" style={{ color: "var(--text-muted)" }}>Số lượng</label>
-            <div className="flex gap-2">
-              {[1, 2, 4].map((n) => (
-                <button
-                  key={n}
-                  onClick={() => setNumberOfOutputs(n)}
-                  className={`mobile-setting-chip ${numberOfOutputs === n ? "active" : ""}`}
-                >
-                  ×{n}
-                </button>
-              ))}
-            </div>
+        {/* Number of outputs */}
+        <div className="mb-4">
+          <label className="text-xs font-medium mb-2 block" style={{ color: "var(--text-muted)" }}>Số lượng</label>
+          <div className="flex gap-2">
+            {[1, 2, 4].map((n) => (
+              <button
+                key={n}
+                onClick={() => setNumberOfOutputs(n)}
+                className={`mobile-setting-chip ${numberOfOutputs === n ? "active" : ""}`}
+              >
+                ×{n}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
 
         <button onClick={onClose} className="w-full py-3 rounded-xl text-sm font-semibold text-white mt-2" style={{ background: "var(--gradient-neon)" }}>
           Xong

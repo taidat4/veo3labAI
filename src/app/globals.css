@@ -714,24 +714,6 @@
     backdrop-filter: blur(4px);
   }
 
-  /* ── Mobile Prompt Bar ── */
-  .mobile-prompt-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
-    padding-bottom: max(10px, env(safe-area-inset-bottom));
-    background: var(--bg-card-solid);
-    border-top: 1px solid var(--border-subtle);
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 50;
-    -webkit-backdrop-filter: blur(16px);
-    backdrop-filter: blur(16px);
-  }
-
   .mobile-type-toggle {
     width: 36px;
     height: 36px;
@@ -785,6 +767,60 @@
   .mobile-generate-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+
+  /* ── Mobile Image Preview Strip ── */
+  .mobile-image-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    border-radius: 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+  }
+  .mobile-preview-thumb {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  .mobile-preview-remove {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .mobile-prompt-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .mobile-prompt-bar {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 12px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    background: var(--bg-card-solid);
+    border-top: 1px solid var(--border-subtle);
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
   }
 
   /* ── Mobile Bottom Sheet ── */
