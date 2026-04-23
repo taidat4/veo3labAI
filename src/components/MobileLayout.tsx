@@ -45,13 +45,13 @@ export function MobileLayout({
   const handleGenerate = async () => {
     if (!prompt.trim()) return showToast("Nhập prompt trước!", "error");
     const store = useStore.getState();
-    const settings = {
-      mediaType: store.mediaTab,
-      aspectRatio: store.aspectRatio,
-      numVideos: store.numberOfOutputs,
-    };
     try {
-      const resp = await api.generate(prompt, settings);
+      const resp = await api.generate({
+        prompt: prompt.trim(),
+        aspect_ratio: store.aspectRatio,
+        number_of_outputs: store.numberOfOutputs,
+        video_model: store.mediaTab === "video" ? store.videoModel : store.imageModel,
+      });
       if (resp.jobs) {
         for (const job of resp.jobs) {
           store.addActiveJob({
@@ -59,11 +59,11 @@ export function MobileLayout({
             prompt: prompt,
             status: "queued",
             progress: 0,
-            mediaType: settings.mediaType,
+            mediaType: store.mediaTab,
             startedAt: Date.now(),
           });
         }
-        showToast(`🚀 Đang tạo ${settings.mediaType === "image" ? "ảnh" : "video"}...`, "success");
+        showToast(`🚀 Đang tạo ${store.mediaTab === "image" ? "ảnh" : "video"}...`, "success");
         setPrompt("");
       }
     } catch (err: any) {
