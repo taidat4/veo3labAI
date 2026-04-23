@@ -96,7 +96,7 @@ export default function HomePage() {
   // ── Fetch history from API (refresh in background) ──
   const fetchHistory = useCallback(async () => {
     try {
-      const data = await api.getJobs(120);
+      const data = await api.getJobs(60);
       const jobs = data.jobs || [];
       setHistory(jobs);
       setIsLoadingHistory(false);

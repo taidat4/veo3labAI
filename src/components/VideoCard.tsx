@@ -429,7 +429,8 @@ export function VideoCard({ job, compact = false, selectable = false, selected =
               ref={videoRef}
               src={mediaUrl}
               className="w-full h-full object-cover"
-              preload="metadata"
+              preload="none"
+              poster=""
               muted
               loop
               playsInline
@@ -487,15 +488,15 @@ export function VideoCard({ job, compact = false, selectable = false, selected =
         <div className="p-3">
           <p className="text-sm font-medium truncate mb-1.5" style={{ color: "var(--text-primary)" }}>{job.prompt}</p>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+          <div className="flex items-center gap-2 flex-wrap" style={{ minHeight: "28px" }}>
+            <div className="flex items-center gap-2 text-xs shrink-0" style={{ color: "var(--text-muted)" }}>
               <span>{new Date(job.created_at).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</span>
               <span>·</span>
               <span>{job.cost.toLocaleString()} credits</span>
             </div>
 
-            {/* Action buttons */}
-            <div className="flex items-center gap-0.5">
+            {/* Action buttons — always visible, never overflow hidden */}
+            <div className="flex items-center gap-0.5 ml-auto shrink-0">
               {/* Delete button */}
               <button onClick={handleDelete} className="btn-ghost !p-1.5 !rounded-lg" title="Xóa"
                 style={{ color: "var(--text-muted)" }}
